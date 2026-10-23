@@ -1154,7 +1154,7 @@ function renderQuizEnd() {
 
 /* ================= 页面渲染 ================= */
 const TABS = [
-  ["lesson", "📖 课文"], ["words", "🔤 词汇"], ["phrases", "🔗 短语"], ["patterns", "✨ 句式"],
+  ["scene", "🎬 情景"], ["lesson", "📖 课文"], ["words", "🔤 词汇"], ["phrases", "🔗 短语"], ["patterns", "✨ 句式"],
   ["grammar", "📐 语法"], ["listen", "🎧 听力"], ["srs", "🗂 生词本"], ["test", "📝 综合测验"], ["wrong", "⭐ 错题本"]
 ];
 function setTab(t) {
@@ -1164,7 +1164,8 @@ function setTab(t) {
   const view = $("#view");
   view.innerHTML = '<div class="loading">加载中…</div>';
   try {
-    if (t === "lesson") renderLessonTab();
+    if (t === "scene") renderSceneTab();
+    else if (t === "lesson") renderLessonTab();
     else if (t === "words") renderWordsTab();
     else if (t === "phrases") renderPhrasesTab();
     else if (t === "patterns") renderPatternsTab();
@@ -1194,6 +1195,385 @@ function bindSpeakBtns(root) {
   });
 }
 
+
+/* ==================== 情景剧场：课文页面图 + 取景 + 对话 ==================== */
+const K_SCENES = "eclass.scenes.v1";
+const PAGE_W = 1100, PAGE_H = 1545;   // 页面图尺寸（决定取景框纵横比）
+
+function sceneSavedMap() { return loadJSON(K_SCENES, {}); }
+function sceneRegion(sc) {
+  const saved = sceneSavedMap()[sc.id];
+  return (Array.isArray(saved) && saved.length === 4) ? saved : sc.region;
+}
+function sceneCands(sc) {
+  const cur = sceneRegion(sc).join(",");
+  const all = [sceneRegion(sc)].concat(sc.cands || []);
+  const out = [];
+  const seen = {};
+  all.forEach(function (r) {
+    const k = r.join(",");
+    if (seen[k]) return;
+    seen[k] = 1;
+    out.push(r);
+  });
+  return out;
+}
+function regionAspect(r) {
+  const w = Math.max(0.5, r[2]), h = Math.max(0.5, r[3]);
+  return (w / h) * (PAGE_W / PAGE_H);
+}
+/* 把取景框微调成指定宽高比：只多看到一点页面，绝不出现留白 */
+function fitRegion(r, target) {
+  const px = r[0] / 100 * PAGE_W, py = r[1] / 100 * PAGE_H;
+  const pw = Math.max(1, r[2] / 100 * PAGE_W), ph = Math.max(1, r[3] / 100 * PAGE_H);
+  let W = pw, H = pw / target;
+  if (H < ph) { H = ph; W = ph * target; }
+  if (W > PAGE_W) { W = PAGE_W; H = W / target; }
+  if (H > PAGE_H) { H = PAGE_H; W = H * target; }
+  let X = px - (W - pw) / 2, Y = py - (H - ph) / 2;
+  X = Math.max(0, Math.min(PAGE_W - W, X));
+  Y = Math.max(0, Math.min(PAGE_H - H, Y));
+  return [Number((X / PAGE_W * 100).toFixed(2)), Number((Y / PAGE_H * 100).toFixed(2)),
+          Number((W / PAGE_W * 100).toFixed(2)), Number((H / PAGE_H * 100).toFixed(2))];
+}
+/* 舞台用的最终取景：宽高比落在舒适区间，保证铺满不露白 */
+function stageRegion(r) {
+  const target = Math.min(2.05, Math.max(0.95, regionAspect(r)));
+  return { region: fitRegion(r, target), aspect: target };
+}
+/* 用 CSS 背景裁出取景框内的画面 */
+function cropBg(img, r) {
+  const w = Math.max(0.5, r[2]), h = Math.max(0.5, r[3]);
+  const size = (10000 / w).toFixed(2) + "% auto";
+  const px = w >= 99.5 ? 0 : (r[0] / (100 - w)) * 100;
+  const py = h >= 99.5 ? 0 : (r[1] / (100 - h)) * 100;
+  return "background-image:url('" + img + "');background-size:" + size +
+         ";background-position:" + px.toFixed(2) + "% " + py.toFixed(2) + "%;background-repeat:no-repeat;";
+}
+function scenePageUrl(sc) { return SCENE_PAGES[sc.page] || SCENE_PAGES.p01; }
+
+function speakerOf(sc, idx, en) {
+  if (/^[a-c]\.\s/.test(en)) return "选项";
+  if (sc.sec === 6 && idx >= 4) return "建议";
+  const m = /^([A-Z][A-Za-z]*(?: & [A-Z][A-Za-z]*)?|Mum Bird|Dad Dog):\s*/.exec(en);
+  if (m && SCENE_SPEAKERS[m[1]]) return m[1];
+  return "旁白";
+}
+function splitSpeaker(sc, idx, en) {
+  const sp = speakerOf(sc, idx, en);
+  if (sp === "旁白" || sp === "选项" || sp === "建议") return { sp: sp, text: en };
+  return { sp: sp, text: en.replace(/^[^:]{1,20}:\s*/, "") };
+}
+function sceneDialogue(sc) {
+  const sec = UNIT_TEXT[sc.sec];
+  return sc.lines.map(function (i) {
+    const l = sec.lines[i] || { en: "", zh: "" };
+    const parts = splitSpeaker(sc, i, l.en);
+    return { i: i, sp: parts.sp, en: parts.text, full: l.en, zh: l.zh || "" };
+  });
+}
+function sceneCurrent() {
+  if (typeof SCENES === "undefined" || !SCENES.length) return null;
+  let sc = SCENES.find(function (x) { return x.id === S.sceneId; });
+  if (!sc) { sc = SCENES[0]; S.sceneId = sc.id; }
+  return sc;
+}
+function sceneStopAuto() {
+  S.playing = false;
+  if (S._sceneTimer) { clearTimeout(S._sceneTimer); S._sceneTimer = null; }
+}
+
+function renderSceneTab() {
+  const view = $("#view");
+  if (typeof SCENES === "undefined" || !SCENES.length) {
+    view.innerHTML = '<div class="card">当前课文没有情景数据（自定义课文暂不支持情景剧场）。</div>';
+    return;
+  }
+  const sc = sceneCurrent();
+  const dlg = sceneDialogue(sc);
+  if (typeof S.sceneLine !== "number" || S.sceneLine >= dlg.length) S.sceneLine = 0;
+  const cur = dlg[S.sceneLine] || dlg[0];
+  const sr = stageRegion(sceneRegion(sc));
+  const r = sr.region;
+  const spk = SCENE_SPEAKERS[cur.sp] || SCENE_SPEAKERS["旁白"];
+
+  let h = '';
+  /* 场景选择条 */
+  h += '<div class="scene-rail" id="sceneRail">';
+  SCENES.forEach(function (s, i) {
+    const rr = fitRegion(sceneRegion(s), 1.87);
+    h += '<button class="scene-thumb' + (s.id === sc.id ? " active" : "") + '" data-scene="' + s.id + '">' +
+         '<span class="st-img" style="' + cropBg(scenePageUrl(s), rr) + '"></span>' +
+         '<span class="st-t">' + esc(s.title) + '</span></button>';
+  });
+  h += '</div>';
+
+  /* 舞台 */
+  h += '<div class="stage-wrap">';
+  h += '<div class="stage" id="stage" style="aspect-ratio:' + sr.aspect.toFixed(4) + ';' + cropBg(scenePageUrl(sc), r) + '">';
+  h += '<div class="stage-top"><span class="badge-page">' + esc(sc.sub) + '</span><span class="scene-pos">' + (S.sceneLine + 1) + '/' + dlg.length + '</span></div>';
+  h += '<div class="subtitle' + (cur.sp === "旁白" ? " narr" : "") + '" id="subtitle">';
+  h += '<span class="spk" style="color:' + spk.color + '">' + spk.emoji + " " + esc(cur.sp) + '</span>';
+  h += '<span class="sub-en">' + esc(cur.en) + '</span>';
+  if (S.showZh && cur.zh) h += '<span class="sub-zh">' + esc(cur.zh) + '</span>';
+  h += '</div></div>';
+
+  /* 控制条 */
+  h += '<div class="stage-ctrl">';
+  h += '<button class="btn btn-ghost btn-sm" id="scPrev" title="上一句">⏮</button>';
+  h += '<button class="btn btn-primary btn-sm" id="scPlay">' + (S.playing ? "⏸ 暂停" : "▶ 连播") + '</button>';
+  h += '<button class="btn btn-ghost btn-sm" id="scNext" title="下一句">⏭</button>';
+  h += '<button class="btn btn-ghost btn-sm" id="scReplay" title="重听本句">🔁</button>';
+  h += '<button class="btn btn-ghost btn-sm" id="scFrame" title="调整取景">🔍 取景</button>';
+  h += '<button class="btn btn-ghost btn-sm" id="scFull" title="全页">🗺 全页</button>';
+  h += '<button class="btn btn-ghost btn-sm" id="scBig" title="放大观看">⛶</button>';
+  h += '</div></div>';
+
+  /* 对话气泡列表 */
+  h += '<div class="card dialogue-card"><div class="sec-title">💬 对话（点句子即可听）</div><div class="dialogue">';
+  dlg.forEach(function (d, k) {
+    const sk = SCENE_SPEAKERS[d.sp] || SCENE_SPEAKERS["旁白"];
+    const side = (d.sp === "旁白") ? "narr" : (k % 2 ? "right" : "left");
+    h += '<div class="bubble ' + side + (k === S.sceneLine ? " on" : "") + '" data-line="' + k + '">';
+    h += '<div class="b-head"><span style="color:' + sk.color + '">' + sk.emoji + " " + esc(d.sp) + '</span>' +
+         '<button class="btn-sound mini" data-play="' + k + '">🔊</button></div>';
+    h += '<div class="b-en" style="background:' + sk.bg + '">' + esc(d.en) + '</div>';
+    if (S.showZh && d.zh) h += '<div class="b-zh">' + esc(d.zh) + '</div>';
+    h += '</div>';
+  });
+  h += '</div></div>';
+
+  view.innerHTML = h;
+  bindSceneTab(sc, dlg);
+}
+
+function bindSceneTab(sc, dlg) {
+  const view = $("#view");
+  $all("[data-scene]", view).forEach(function (b) {
+    b.onclick = function () {
+      sceneStopAuto(); stopSpeak();
+      S.sceneId = b.getAttribute("data-scene");
+      S.sceneLine = 0;
+      renderSceneTab();
+    };
+  });
+  function paint() {
+    /* 只更新字幕与高亮，避免整页重绘打断播放 */
+    const d = dlg[S.sceneLine] || dlg[0];
+    const sk = SCENE_SPEAKERS[d.sp] || SCENE_SPEAKERS["旁白"];
+    const sub = $("#subtitle");
+    if (sub) {
+      sub.className = "subtitle" + (d.sp === "旁白" ? " narr" : "");
+      sub.innerHTML = '<span class="spk" style="color:' + sk.color + '">' + sk.emoji + " " + esc(d.sp) + '</span>' +
+        '<span class="sub-en">' + esc(d.en) + '</span>' +
+        (S.showZh && d.zh ? '<span class="sub-zh">' + esc(d.zh) + '</span>' : "");
+    }
+    const pos = $(".scene-pos", view);
+    if (pos) pos.textContent = (S.sceneLine + 1) + "/" + dlg.length;
+    $all(".bubble", view).forEach(function (b) {
+      b.classList.toggle("on", Number(b.getAttribute("data-line")) === S.sceneLine);
+    });
+  }
+  function speakLine(cb) {
+    const d = dlg[S.sceneLine];
+    if (!d) return cb && cb();
+    let done = false;
+    const once = function () { if (done) return; done = true; if (cb) cb(); };
+    speak(d.full, { onend: once });
+    const words = d.full.split(/\s+/).length;
+    S._sceneTimer = setTimeout(once, Math.max(2200, words * 430 / Math.max(0.5, S.rate)));
+  }
+  function goto(n, autoSpeak) {
+    S.sceneLine = (n + dlg.length) % dlg.length;
+    paint();
+    if (autoSpeak) speakLine(S.playing ? function () { setTimeout(function () { if (S.playing) goto(S.sceneLine + 1, true); }, 260); } : null);
+  }
+  $("#scNext").onclick = function () { sceneStopAuto(); syncPlayBtn(); goto(S.sceneLine + 1, true); };
+  $("#scPrev").onclick = function () { sceneStopAuto(); syncPlayBtn(); goto(S.sceneLine - 1, true); };
+  $("#scReplay").onclick = function () { speakLine(null); };
+  $("#scPlay").onclick = function () {
+    if (S.playing) { sceneStopAuto(); stopSpeak(); syncPlayBtn(); return; }
+    S.playing = true; syncPlayBtn();
+    goto(S.sceneLine, true);
+  };
+  function syncPlayBtn() {
+    const b = $("#scPlay");
+    if (b) b.textContent = S.playing ? "⏸ 暂停" : "▶ 连播";
+  }
+  $("#scFrame").onclick = function () { sceneStopAuto(); stopSpeak(); openViewfinder(sc); };
+  $("#scFull").onclick = function () {
+    const map = sceneSavedMap();
+    map[sc.id] = [0, 0, 100, 100];
+    saveJSON(K_SCENES, map);
+    renderSceneTab();
+  };
+  $("#scBig").onclick = function () {
+    const st = $("#stage");
+    if (!st) return;
+    if (st.requestFullscreen) st.requestFullscreen().catch(function () {});
+    else if (st.webkitRequestFullscreen) st.webkitRequestFullscreen();
+  };
+  $all("[data-play]", view).forEach(function (b) {
+    b.onclick = function (ev) {
+      ev.stopPropagation();
+      sceneStopAuto(); syncPlayBtn();
+      goto(Number(b.getAttribute("data-play")), false);
+      speakLine(null);
+    };
+  });
+  $all(".bubble", view).forEach(function (b) {
+    b.onclick = function () {
+      sceneStopAuto(); syncPlayBtn();
+      goto(Number(b.getAttribute("data-line")), false);
+      speakLine(null);
+    };
+  });
+  const st = $("#stage");
+  if (st) st.onclick = function () { sceneStopAuto(); syncPlayBtn(); goto(S.sceneLine + 1, true); };
+}
+
+/* ---------- 取景器：拖动/缩放页面图，选出一块场景 ---------- */
+function openViewfinder(sc) {
+  sceneStopAuto(); stopSpeak();
+  const view = $("#view");
+  const img = scenePageUrl(sc);
+  const AI = PAGE_W / PAGE_H;        // 图片宽/高
+  const cur = sceneRegion(sc);
+  let s = 100 / Math.max(1, cur[2]); // 缩放：取景框越窄，放的越大
+  let Ws = 0, Hs = 0;
+
+  let h = '<div class="vf-wrap">';
+  h += '<div class="vf-tip">🖐 拖动图片选择画面 · 滑块缩放 · 满意后点【用这块画面】</div>';
+  h += '<div class="vf-stage" id="vfStage"><img id="vfImg" src="' + esc(img) + '" alt="课本页面"></div>';
+  h += '<div class="vf-bar"><span>缩放</span><input type="range" id="vfZoom" min="0" max="100" value="0"><span id="vfPct">100%</span></div>';
+  h += '<div class="vf-grid" id="vfGrid"></div>';
+  h += '<div class="vf-actions"><button class="btn btn-ghost btn-sm" id="vfReset">↺ 原始取景</button>' +
+       '<button class="btn btn-ghost btn-sm" id="vfCand">🎲 换一个候选</button>' +
+       '<button class="btn btn-ghost btn-sm" id="vfCancel">取消</button>' +
+       '<button class="btn btn-primary" id="vfOk">✓ 用这块画面</button></div>';
+  h += '<div class="vf-hint">提示：九宫格可用于快速定位；「换一个候选」在我预先挑好的几处画面之间轮换。</div>';
+  h += '</div>';
+  view.innerHTML = h;
+
+  const stage = $("#vfStage"), im = $("#vfImg"), zoom = $("#vfZoom");
+  let tx = 0, ty = 0, sMin = 1, dragging = false, lastX = 0, lastY = 0, moved = 0;
+
+  function measure() {
+    Ws = stage.clientWidth; Hs = stage.clientHeight;
+    sMin = Math.max(1, (Hs * AI) / Ws);
+    clamp();
+    draw();
+  }
+  function dims() {
+    const dw = Ws * s, dh = dw / AI;
+    return { dw: dw, dh: dh };
+  }
+  function clamp() {
+    const d = dims();
+    tx = Math.min(0, Math.max(Ws - d.dw, tx));
+    ty = Math.min(0, Math.max(Hs - d.dh, ty));
+  }
+  function draw() {
+    im.style.width = (Ws * s) + "px";
+    im.style.transform = "translate(" + tx + "px," + ty + "px)";
+    const pct = Math.round((s / sMin) * 100);
+    $("#vfPct").textContent = pct + "%";
+    zoom.value = Math.min(100, Math.max(0, ((s - sMin) / (sMin * 3)) * 100));
+  }
+  function regionFromView() {
+    const d = dims();
+    const w = (Ws / d.dw) * 100, h = (Hs / d.dh) * 100;
+    const x = (-tx / d.dw) * 100, y = (-ty / d.dh) * 100;
+    const cl = function (v) { return Math.min(100, Math.max(0, Math.round(v * 10) / 10)); };
+    return [cl(x), cl(y), Math.min(100, cl(w)), Math.min(100, cl(h))];
+  }
+  function setRegion(r) {
+    s = 100 / Math.max(1, r[2]);
+    if (s < sMin) s = sMin;
+    const d = dims();
+    tx = -(r[0] / 100) * d.dw;
+    ty = -(r[1] / 100) * d.dh;
+    clamp(); draw();
+  }
+
+  stage.addEventListener("pointerdown", function (e) {
+    dragging = true; moved = 0; lastX = e.clientX; lastY = e.clientY;
+    if (stage.setPointerCapture) { try { stage.setPointerCapture(e.pointerId); } catch (err) {} }
+  });
+  stage.addEventListener("pointermove", function (e) {
+    if (!dragging) return;
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    moved += Math.abs(dx) + Math.abs(dy);
+    lastX = e.clientX; lastY = e.clientY;
+    tx += dx; ty += dy; clamp(); draw();
+    e.preventDefault();
+  });
+  stage.addEventListener("pointerup", function () { dragging = false; });
+  stage.addEventListener("pointercancel", function () { dragging = false; });
+  stage.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    s = Math.max(sMin, Math.min(sMin * 4, s * (e.deltaY > 0 ? 0.92 : 1.08)));
+    clamp(); draw();
+  }, { passive: false });
+  zoom.oninput = function () {
+    s = sMin + (sMin * 3) * (Number(zoom.value) / 100);
+    clamp(); draw();
+  };
+  /* 双指缩放 */
+  let pinch = null;
+  stage.addEventListener("touchstart", function (e) {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinch = { d: Math.hypot(dx, dy), s: s };
+    }
+  }, { passive: true });
+  stage.addEventListener("touchmove", function (e) {
+    if (e.touches.length === 2 && pinch) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const d = Math.hypot(dx, dy);
+      s = Math.max(sMin, Math.min(sMin * 4, pinch.s * (d / pinch.d)));
+      clamp(); draw();
+      e.preventDefault();
+    }
+  }, { passive: false });
+  stage.addEventListener("touchend", function () { pinch = null; }, { passive: true });
+
+  /* 九宫格 */
+  const grid = $("#vfGrid");
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 3; col++) {
+      const b = document.createElement("button");
+      b.className = "vf-cell";
+      b.textContent = (row + 1) + "·" + (col + 1);
+      b.onclick = function () {
+        setRegion([col * 33.3, row * 33.3, 33.4, 33.4]);
+      };
+      grid.appendChild(b);
+    }
+  }
+  $("#vfReset").onclick = function () { setRegion(sc.region); };
+  let ci = 0;
+  $("#vfCand").onclick = function () {
+    const cs = sceneCands(sc);
+    ci = (ci + 1) % cs.length;
+    setRegion(cs[ci]);
+  };
+  $("#vfCancel").onclick = function () { renderSceneTab(); };
+  $("#vfOk").onclick = function () {
+    const map = sceneSavedMap();
+    map[sc.id] = regionFromView();
+    saveJSON(K_SCENES, map);
+    renderSceneTab();
+  };
+
+  im.onload = function () { measure(); };
+  im.onerror = function () { measure(); };
+  setTimeout(measure, 30);
+  setTimeout(function () { setRegion(cur); }, 60);
+}
+
 /* ---- 课文 ---- */
 function renderLessonTab() {
   const m = currentModel();
@@ -1214,7 +1594,10 @@ function renderLessonTab() {
   if (m.kind === "builtin") {
     m.unitText.forEach(function (sec, si) {
       const tb = (typeof TEXTBOOK_TRACKS !== "undefined" ? TEXTBOOK_TRACKS : []).find(function (t) { return t.sec === si; });
-      h += '<div class="card sec"><div class="sec-title">' + sec.icon + " " + esc(sec.title) + ' <button class="btn-sound" data-sec="' + si + '">🔊 连读</button>';
+      const bgPage = (typeof SECTION_IMAGES !== "undefined") ? SECTION_IMAGES[si] : null;
+      const bgStyle = bgPage ? ' style="--img:url(' + "'" + SCENE_PAGES[bgPage] + "'" + ')"' : "";
+      const bgCls = bgPage ? " has-img" : "";
+      h += '<div class="card sec' + bgCls + '"' + bgStyle + '><div class="sec-title">' + sec.icon + " " + esc(sec.title) + ' <button class="btn-sound" data-sec="' + si + '">🔊 连读</button>';
       if (tb) h += ' <button class="btn-sound tb-btn" data-playfile="' + esc(tb.file) + '" title="' + esc(tb.title + " · " + tb.dur) + '">📻 课本原声 ' + esc(tb.dur) + '</button>';
       h += '</div>';
       sec.lines.forEach(function (l) {
@@ -1465,13 +1848,13 @@ function renderGrammarTab() {
   h += '<button class="btn btn-primary" data-q="cloze">选词填空（8题）</button>';
   h += '<button class="btn btn-primary" data-q="reorder">连词成句（8题）</button>';
   h += '</div></div>';
-  m.grammarPoints.forEach(function (g) {
+  (m.grammarPoints || []).forEach(function (g) {
     h += '<div class="card sec"><div class="sec-title">' + (g.core ? '<span class="badge core">核心</span> ' : '') + esc(g.title) + '</div>';
     h += '<div class="grammar-body">' + g.body + '</div><ul class="rules">';
     g.rules.forEach(function (r) { h += '<li>' + r + '</li>'; });
     h += '</ul><div class="tip">💡 ' + esc(g.tip) + '</div></div>';
   });
-  if (!m.grammarPoints.length) h += '<div class="card">自定义课文暂无固定语法讲解，可直接做“语法选择填空”（自动生成）。</div>';
+  if (!(m.grammarPoints || []).length) h += '<div class="card">自定义课文暂无固定语法讲解，可直接做“语法选择填空”（自动生成）。</div>';
   view.innerHTML = h;
   $all("[data-q]").forEach(function (b) {
     b.onclick = function () {
@@ -1850,7 +2233,7 @@ function initApp() {
   if (TABS.some(function (t) { return t[0] === h; })) {
     setTimeout(function () { setTab(h); }, 0);
   } else {
-    setTab("lesson");
+    setTab(typeof SCENES !== "undefined" ? "scene" : "lesson");
   }
 }
 function openPasteModal() {
@@ -1867,7 +2250,10 @@ if (typeof document !== "undefined" && typeof window !== "undefined") {
     genListenSent: genListenSent, genPassage: genPassage, genSrsReview: genSrsReview,
     mutateSentence: mutateSentence, builtinModel: builtinModel, genGrammarCustom: genGrammarCustom,
     buildCustomPassages: buildCustomPassages, startQuiz: startQuiz,
-    state: S, srsAdd: srsAdd, srsUpdate: srsUpdate, srsItems: function () { return SRS.items; }
+    state: S, srsAdd: srsAdd, srsUpdate: srsUpdate, srsItems: function () { return SRS.items; },
+    currentModel: currentModel, switchLesson: switchLesson, handleUploadText: handleUploadText,
+    scenes: (typeof SCENES !== "undefined" ? SCENES : []),
+    sceneDialogue: sceneDialogue, cropBg: cropBg, regionAspect: regionAspect
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initApp);
   else initApp();

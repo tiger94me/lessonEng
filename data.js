@@ -269,6 +269,111 @@ const TEXTBOOK_TRACKS = [
   { file: "textbook_audio/04_Fuel_up_3_Listen_and_choose.mp3", title: "Fuel up · 3 Listen and choose", zh: "课本听力：Sally & Mia", sec: 6, dur: "1:17" }
 ];
 
+
+/* ---------- 情景剧场：课文页面图 + 取景框 + 对话 ----------
+   region  = [x, y, w, h]，单位为整页百分比，用于从课本页面图上取一块场景
+   cands   = 该页可选的其它取景（用户点“取景”时轮换）
+   lines   = 该板块 UNIT_TEXT 中的行号，音频沿用已生成的逐句音频
+*/
+const SCENE_PAGES = {
+  p01: "scenes/unit3_p01.jpg", p02: "scenes/unit3_p02.jpg", p03: "scenes/unit3_p03.jpg",
+  p04: "scenes/unit3_p04.jpg", p05: "scenes/unit3_p05.jpg", p06: "scenes/unit3_p06.jpg",
+  p07: "scenes/unit3_p07.jpg", p08: "scenes/unit3_p08.jpg", p09: "scenes/unit3_p09.jpg",
+  p10: "scenes/unit3_p10.jpg", p11: "scenes/unit3_p11.jpg", p12: "scenes/unit3_p12.jpg"
+};
+
+/* 说话人与配色（用于对话气泡） */
+const SCENE_SPEAKERS = {
+  "旁白":   { emoji: "📖", color: "#5b6b8c", bg: "#eef1f8" },
+  "Duoduo": { emoji: "👦", color: "#2563c9", bg: "#e8f0fe" },
+  "Tutu":   { emoji: "🧒", color: "#c2570c", bg: "#fff0e2" },
+  "Bird":   { emoji: "🐦", color: "#0b7f6b", bg: "#e4f7f2" },
+  "Dog":    { emoji: "🐶", color: "#7a4b12", bg: "#fdf2df" },
+  "Rabbit": { emoji: "🐰", color: "#b4356b", bg: "#fdeaf2" },
+  "Mum Bird": { emoji: "🐤", color: "#0b7f6b", bg: "#e4f7f2" },
+  "Dad Dog":  { emoji: "🐕", color: "#7a4b12", bg: "#fdf2df" },
+  "Bird & Dog": { emoji: "🐦🐶", color: "#6b4bb5", bg: "#f0ebfd" },
+  "Sally":  { emoji: "👧", color: "#b4356b", bg: "#fdeaf2" },
+  "Mia":    { emoji: "👧", color: "#c2570c", bg: "#fff0e2" },
+  "选项":   { emoji: "🔤", color: "#5b6b8c", bg: "#eef1f8" },
+  "建议":   { emoji: "💡", color: "#8a6d00", bg: "#fdf6d9" }
+};
+
+const SCENES = [
+  { id: "getready", sec: 1, page: "p02", title: "我们这样相处", sub: "Get ready",
+    region: [2, 6, 96, 26],
+    cands: [[2, 6, 96, 26], [2, 34, 96, 22], [2, 58, 96, 10], [2, 70, 96, 10], [0, 3, 100, 97]],
+    lines: [0, 1, 2, 3, 4, 5, 6] },
+
+  { id: "duoduo-play", sec: 2, page: "p03", title: "多多和图图一起玩", sub: "Read and answer",
+    region: [3, 15, 45, 30],
+    cands: [[3, 15, 45, 30], [4, 17, 40, 26], [8, 18, 36, 24], [4, 44, 42, 25]],
+    lines: [1, 2] },
+
+  { id: "duoduo-sad", sec: 2, page: "p03", title: "图图有了新朋友", sub: "Read and answer",
+    region: [4, 44, 42, 25],
+    cands: [[4, 44, 42, 25], [4, 17, 40, 26], [3, 15, 45, 30], [2, 10, 46, 62]],
+    lines: [3, 4, 5] },
+
+  { id: "duoduo-talk", sec: 2, page: "p03", title: "多多心里的疑问", sub: "Read and answer",
+    region: [33, 30, 34, 24],
+    cands: [[33, 30, 34, 24], [40, 30, 28, 20], [3, 15, 45, 30], [0, 5, 100, 95]],
+    lines: [6, 7] },
+
+  { id: "duoduo-happy", sec: 2, page: "p03", title: "我们还是朋友", sub: "Read and answer",
+    region: [8, 18, 36, 24],
+    cands: [[8, 18, 36, 24], [3, 15, 45, 30], [4, 44, 42, 25], [33, 30, 34, 24]],
+    lines: [8, 9, 10, 11] },
+
+  { id: "birddog-1", sec: 4, page: "p05", title: "鸟妈妈和狗爸爸不同意", sub: "Story time",
+    region: [4, 12, 92, 26],
+    cands: [[4, 12, 92, 26], [4, 8, 40, 18], [14, 20, 72, 20], [0, 5, 100, 95]],
+    lines: [0, 1, 2] },
+
+  { id: "birddog-2", sec: 4, page: "p05", title: "我们证明给他们看", sub: "Story time",
+    region: [4, 42, 92, 16],
+    cands: [[4, 42, 92, 16], [20, 42, 56, 15], [4, 12, 92, 26]],
+    lines: [3, 4, 5] },
+
+  { id: "birddog-3", sec: 4, page: "p06", title: "兔子来帮忙", sub: "Story time",
+    region: [4, 25, 92, 16],
+    cands: [[4, 25, 92, 16], [22, 22, 56, 16], [50, 2, 48, 17], [0, 5, 100, 95]],
+    lines: [6, 7, 8] },
+
+  { id: "birddog-4", sec: 4, page: "p06", title: "最好的朋友", sub: "Story time",
+    region: [48, 1, 52, 20],
+    cands: [[48, 1, 52, 20], [22.9, 23.3, 55, 19.1], [4, 25, 92, 16], [0, 5, 100, 95]],
+    lines: [9, 10] },
+
+  { id: "chant", sec: 5, page: "p07", title: "我们又是朋友啦", sub: "Listen and chant",
+    region: [8, 15, 84, 56],
+    cands: [[8, 15, 84, 56], [8, 14, 40, 28], [52, 14, 40, 28], [0, 5, 100, 95]],
+    lines: [0, 1, 2, 3, 4, 5, 6, 7, 8] },
+
+  { id: "sally-q", sec: 6, page: "p08", title: "萨莉和米娅生气了", sub: "Listen and choose",
+    region: [7, 26, 30, 30],
+    cands: [[7, 26, 30, 30], [10, 28, 22, 26], [4, 8, 92, 46], [0, 5, 100, 95]],
+    lines: [0, 1, 2, 3] },
+
+  { id: "sally-tips", sec: 6, page: "p08", title: "和好三步走", sub: "Listen and choose",
+    region: [14, 71, 72, 27],
+    cands: [[14, 71, 72, 27], [4, 55, 92, 42], [7, 26, 30, 30], [0, 5, 100, 95]],
+    lines: [4, 5, 6, 7, 8, 9] },
+
+  { id: "poster", sec: 7, page: "p10", title: "我的好朋友海报", sub: "Hit it big",
+    region: [24, 25, 64, 22],
+    cands: [[24, 25, 64, 22], [16, 13, 72, 12], [24, 44, 54, 10], [0, 5, 100, 95]],
+    lines: [0, 1, 2, 3, 4] },
+
+  { id: "unday", sec: 8, page: "p12", title: "国际友谊日", sub: "Let's explore",
+    region: [10, 10, 80, 55],
+    cands: [[10, 10, 80, 55], [12, 10, 76, 26], [12, 38, 76, 27], [0, 5, 100, 95]],
+    lines: [0, 1, 2, 3, 4, 5, 6] }
+];
+
+/* 每个课文板块的配图（用于课文卡片背景） */
+const SECTION_IMAGES = { 0: "p01", 1: "p02", 2: "p03", 3: "p04", 4: "p05", 5: "p07", 6: "p08", 7: "p10", 8: "p12" };
+
 /* ---------- Sally & Mia 听力场景文本 ---------- */
 const SALLY_TEXT = "Why are Sally and Mia angry with each other? They have different plans for their science homework. Sally, do these. Then you and Mia can be happy friends again. First, say sorry to Mia because friends should be kind to each other. Then have a chat with Mia. Friends should listen to each other. Try to find the best plan for the homework.";
 
