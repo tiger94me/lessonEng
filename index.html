@@ -444,9 +444,27 @@ For Duoduo, Tutu is his best and only friend. He wants to play with Tutu, but Tu
 </div>
 
 <div id="toast"></div>
+<script>window.__appStarted = false;</script>
 <script src="audio/manifest.js"></script>
 <script src="pdfjs/pdf.min.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
+<script>
+  /* 兜底：script 出错或初始化失败时，页面不能只剩一个头 */
+  window.addEventListener("error", function (e) {
+    var v = document.getElementById("view");
+    if (v && v.querySelector(".loading")) {
+      v.innerHTML = '<div class="card">页面加载出错了：' + String((e && e.message) || "未知错误") +
+        '<br><button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="location.reload()">重新加载</button></div>';
+    }
+  });
+  setTimeout(function () {
+    var v = document.getElementById("view");
+    if (v && v.querySelector(".loading")) {
+      v.innerHTML = '<div class="card">页面没能完成初始化。<br>' +
+        '<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="location.reload()">重新加载</button></div>';
+    }
+  }, 8000);
+</script>
 </body>
 </html>

@@ -1174,6 +1174,7 @@ function setTab(t) {
     else if (t === "srs") renderSrsTab();
     else if (t === "test") renderTestTab();
     else if (t === "wrong") renderWrongTab();
+    if (typeof window !== "undefined") window.__appStarted = true;
   } catch (e) {
     view.innerHTML = '<div class="card">出错了：' + esc(e.message) + '</div>';
   }
@@ -1251,6 +1252,17 @@ function cropBg(img, r) {
          ";background-position:" + px.toFixed(2) + "% " + py.toFixed(2) + "%;background-repeat:no-repeat;";
 }
 function scenePageUrl(sc) { return SCENE_PAGES[sc.page] || SCENE_PAGES.p01; }
+/* 小图变体：t = 缩略图（导轨/气泡，约 33KB），h = 中图（舞台主图）；
+   大页面图只在取景器/全页/大屏时才加载，避免 iPad 一次性解码十几张 1100×1545 图 */
+function pageVariant(url, v) {
+  if (!v) return url;
+  return url.replace(/^(.*\/)unit3_(p\d+)\.jpg$/, "$1" + v + "/unit3_$2.jpg");
+}
+function sceneUrl(sc, v) { return pageVariant(scenePageUrl(sc), v); }
+function bigScreen() {
+  return typeof window !== "undefined" && window.innerWidth >= 900 &&
+         !(window.matchMedia && window.matchMedia("(max-width: 720px)").matches);
+}
 /* 插图块的宽高比（用于占位，防止加载抖动） */
 function shotAspect(shot) {
   const w = Math.max(0.4, shot[2]), h = Math.max(0.4, shot[3]);
@@ -1311,11 +1323,13 @@ function renderSceneTab() {
   const asp = shotAspect(shot);
 
   let h = '';
+  const mainV = bigScreen() ? "" : "h";
   h += '<div class="scene-rail" id="sceneRail">';
   SCENES.forEach(function (s) {
     const th = fitRegion(sceneShotFor(s, 0), 1.87);
     h += '<button class="scene-thumb' + (s.id === sc.id ? " active" : "") + '" data-scene="' + s.id + '">' +
-         '<span class="st-img" style="' + cropBg(scenePageUrl(s), th) + '"></span>' +
+         '<span class="st-img" data-page="' + esc(scenePageUrl(s)) + '" data-region="' + th.join(",") +
+         '" style="background-color:#eef1f8"></span>' +
          '<span class="st-t">' + esc(s.title) + '</span></button>';
   });
   h += '</div>';
@@ -1324,7 +1338,8 @@ function renderSceneTab() {
   h += '<div class="scene-main-head"><span class="scene-title">' + esc(sc.title) + '</span><span class="scene-sub">' + esc(sc.sub) + ' · ' + (S.sceneLine + 1) + '/' + dlg.length + '</span></div>';
   h += '<div class="scene-split" style="--ar:' + asp.toFixed(4) + '">';
   h += '<div class="scene-fig">';
-  h += '<div class="scene-img" id="sceneImg" style="' + cropBg(scenePageUrl(sc), shot) + '"></div>';
+  h += '<div class="scene-img" id="sceneImg" data-page="' + esc(scenePageUrl(sc)) + '" data-region="' + shot.join(",") +
+       '" style="background-color:#e8ecf6"></div>';
   h += '<div class="scene-fig-bar"><button class="btn btn-ghost btn-xs" id="scFrame" title="选取画面">🔍 换画面</button>' +
        '<span class="scene-fig-note">课本 ' + sc.page.replace("p", "P") + '</span></div>';
   h += '</div>';
@@ -1357,7 +1372,8 @@ function renderSceneTab() {
     h += '<div class="b-head"><span style="color:' + sk.color + '">' + sk.emoji + " " + esc(d.sp) + '</span>' +
          '<button class="btn-sound mini" data-play="' + k + '">🔊</button></div>';
     h += '<div class="b-body">';
-    h += '<span class="b-thumb" style="' + cropBg(scenePageUrl(sc), sceneShotFor(sc, k)) + '"></span>';
+    const bshot = sceneShotFor(sc, k);
+    h += '<span class="b-thumb" data-page="' + esc(scenePageUrl(sc)) + '" data-region="' + bshot.join(",") + '"></span>';
     h += '<span class="b-txt"><span class="b-en" style="background:' + sk.bg + '">' + esc(d.en) + '</span>' +
          (S.showZh && d.zh ? '<span class="b-zh">' + esc(d.zh) + '</span>' : '') + '</span>';
     h += '</div></div>';
@@ -1366,9 +1382,43 @@ function renderSceneTab() {
 
   view.innerHTML = h;
   bindSceneTab(sc, dlg);
+  paintCrops(view, mainV);
 }
 
-
+/* 先把所有小图分批上色，再按需加载主舞台的中图/大图（首屏只画小图，iPad 不再卡死） */
+function paintCrops(root, mainV) {
+  const jobs = [];
+  const main = root.querySelector("#sceneImg");
+  $all(".st-img[data-page], .b-thumb[data-page]", root).forEach(function (el) {
+    jobs.push({ el: el, v: "t", page: el.getAttribute("data-page"), region: regionOf(el) });
+  });
+  function regionOf(el) { return String(el.getAttribute("data-region")).split(",").map(Number); }
+  function setBg(el, v) {
+    el.style.cssText = cropBg(pageVariant(el.getAttribute("data-page"), v), regionOf(el));
+    el.setAttribute("data-variant", v);
+  }
+  let i = 0;
+  function step() {
+    if (i < jobs.length) {
+      const j = jobs[i++];
+      setBg(j.el, "t");
+      if (i % 5 === 0) setTimeout(step, 30); else setTimeout(step, 0);
+      return;
+    }
+    if (main && main.isConnected) {
+      setBg(main, mainV === undefined || mainV === null ? "h" : mainV);
+      if (!bigScreen()) {
+        /* 小屏先用中图立即显示，再在空闲时换成大图（仅供全屏/放大观看） */
+        const up = function () {
+          if (main.isConnected && !bigScreen()) return;
+          if (main.isConnected) setBg(main, "");
+        };
+        if (window.requestIdleCallback) requestIdleCallback(up, { timeout: 2500 }); else setTimeout(up, 1200);
+      }
+    }
+  }
+  setTimeout(step, 0);
+}
 function bindSceneTab(sc, dlg) {
   const view = $("#view");
   $all("[data-scene]", view).forEach(function (b) {
@@ -1386,7 +1436,9 @@ function bindSceneTab(sc, dlg) {
     const shot = sceneShotFor(sc, S.sceneLine);
     const img = $("#sceneImg");
     if (img) {
-      img.style.cssText = cropBg(scenePageUrl(sc), shot);
+      const v = img.getAttribute("data-variant");
+      img.style.cssText = cropBg(sceneUrl(sc, v === null ? "h" : v), shot);
+      img.setAttribute("data-region", shot.join(","));
       const fig = $(".scene-fig");
       if (fig) fig.style.setProperty("--ar", shotAspect(shot).toFixed(4));
     }
@@ -1608,6 +1660,35 @@ function openViewfinder(sc) {
   setTimeout(function () { setRegion(cur); }, 60);
 }
 
+/* 惰性配图：只有快要进入视口时才上色，60 多个小图不再一次性合成 */
+let _cropObserver = null;
+function lazyCrops(root) {
+  const els = $all(".line-thumb[data-page], .sec-hero[data-page]", root);
+  if (!els.length) return;
+  function draw(el) {
+    if (el.getAttribute("data-drawn")) return;
+    el.setAttribute("data-drawn", "1");
+    const r = String(el.getAttribute("data-region")).split(",").map(Number);
+    const v = el.classList.contains("sec-hero") ? "h" : "t";
+    el.style.cssText = cropBg(pageVariant(el.getAttribute("data-page"), v), r);
+  }
+  if (typeof IntersectionObserver === "undefined") { els.forEach(draw); return; }
+  els.forEach(function (el) {
+    el._draw = draw;
+    _cropObserver.observe(el);
+  });
+}
+function initCropObserver() {
+  if (typeof IntersectionObserver === "undefined") return;
+  _cropObserver = new IntersectionObserver(function (entries) {
+    entries.forEach(function (en) {
+      if (!en.isIntersecting) return;
+      _cropObserver.unobserve(en.target);
+      if (en.target._draw) en.target._draw(en.target);
+    });
+  }, { rootMargin: "300px 0px" });
+}
+
 /* ---- 课文 ---- */
 function renderLessonTab() {
   const m = currentModel();
@@ -1635,13 +1716,13 @@ function renderLessonTab() {
       h += '</div>';
       if (scn) {
         const hero = fitRegion(sceneRegion(scn), 4.6);
-        h += '<div class="sec-hero" style="' + cropBg(scenePageUrl(scn), hero) + '"></div>';
+        h += '<div class="sec-hero" data-page="' + esc(scenePageUrl(scn)) + '" data-region="' + hero.join(",") + '"></div>';
       }
       sec.lines.forEach(function (l, li) {
         const cls = l.q ? "line q-line" : "line";
         const thumb = scn ? fitRegion(sceneShotFor(scn, li), 1.9) : null;
         h += '<div class="' + cls + '">';
-        if (thumb) h += '<span class="line-thumb" style="' + cropBg(scenePageUrl(scn), thumb) + '"></span>';
+        if (thumb) h += '<span class="line-thumb" data-page="' + esc(scenePageUrl(scn)) + '" data-region="' + thumb.join(",") + '"></span>';
         h += '<span class="line-body"><span class="line-en">' + speakBtn(l.en) + '<span>' + esc(l.en) + '</span></span>';
         if (S.showZh && l.zh) h += '<span class="line-zh">' + esc(l.zh) + '</span>';
         h += '</span></div>';
@@ -1686,6 +1767,7 @@ function renderLessonTab() {
   }
   view.innerHTML = h;
   bindSpeakBtns(view);
+  lazyCrops(view);
 
   $all("[data-sec]").forEach(function (b) {
     b.onclick = function () {
@@ -2204,6 +2286,7 @@ function toast(msg) {
 }
 
 function initApp() {
+  initCropObserver();
   loadSettings();
   loadWrong();
   initSRS();
