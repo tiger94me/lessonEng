@@ -1,0 +1,6 @@
+# 中间产物与个人数据
+pdf/
+.DS_Store
+Thumbs.db
+# 本地测试脚本产物
+tools/tts_texts.json
