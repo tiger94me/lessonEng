@@ -1251,6 +1251,19 @@ function cropBg(img, r) {
          ";background-position:" + px.toFixed(2) + "% " + py.toFixed(2) + "%;background-repeat:no-repeat;";
 }
 function scenePageUrl(sc) { return SCENE_PAGES[sc.page] || SCENE_PAGES.p01; }
+/* 插图块的宽高比（用于占位，防止加载抖动） */
+function shotAspect(shot) {
+  const w = Math.max(0.4, shot[2]), h = Math.max(0.4, shot[3]);
+  return Math.min(2.2, Math.max(0.75, (w / h) * (PAGE_W / PAGE_H)));
+}
+/* 按句配图：均衡分配该场景的插图块（正反序交替，避免连续重复） */
+function sceneShotFor(sc, idx) {
+  const blocks = (sc.shots && sc.shots.length) ? sc.shots
+    : (sc.cands && sc.cands.length ? [sc.region] : [sc.region]);
+  if (blocks.length === 1) return blocks[0];
+  /* 纯循环交替：保证相邻两句配图一定不同 */
+  return blocks[idx % blocks.length];
+}
 
 function speakerOf(sc, idx, en) {
   if (/^[a-c]\.\s/.test(en)) return "选项";
@@ -1293,59 +1306,68 @@ function renderSceneTab() {
   const dlg = sceneDialogue(sc);
   if (typeof S.sceneLine !== "number" || S.sceneLine >= dlg.length) S.sceneLine = 0;
   const cur = dlg[S.sceneLine] || dlg[0];
-  const sr = stageRegion(sceneRegion(sc));
-  const r = sr.region;
   const spk = SCENE_SPEAKERS[cur.sp] || SCENE_SPEAKERS["旁白"];
+  const shot = sceneShotFor(sc, S.sceneLine);
+  const asp = shotAspect(shot);
 
   let h = '';
-  /* 场景选择条 */
   h += '<div class="scene-rail" id="sceneRail">';
-  SCENES.forEach(function (s, i) {
-    const rr = fitRegion(sceneRegion(s), 1.87);
+  SCENES.forEach(function (s) {
+    const th = fitRegion(sceneShotFor(s, 0), 1.87);
     h += '<button class="scene-thumb' + (s.id === sc.id ? " active" : "") + '" data-scene="' + s.id + '">' +
-         '<span class="st-img" style="' + cropBg(scenePageUrl(s), rr) + '"></span>' +
+         '<span class="st-img" style="' + cropBg(scenePageUrl(s), th) + '"></span>' +
          '<span class="st-t">' + esc(s.title) + '</span></button>';
   });
   h += '</div>';
 
-  /* 舞台 */
-  h += '<div class="stage-wrap">';
-  h += '<div class="stage" id="stage" style="aspect-ratio:' + sr.aspect.toFixed(4) + ';' + cropBg(scenePageUrl(sc), r) + '">';
-  h += '<div class="stage-top"><span class="badge-page">' + esc(sc.sub) + '</span><span class="scene-pos">' + (S.sceneLine + 1) + '/' + dlg.length + '</span></div>';
-  h += '<div class="subtitle' + (cur.sp === "旁白" ? " narr" : "") + '" id="subtitle">';
-  h += '<span class="spk" style="color:' + spk.color + '">' + spk.emoji + " " + esc(cur.sp) + '</span>';
-  h += '<span class="sub-en">' + esc(cur.en) + '</span>';
-  if (S.showZh && cur.zh) h += '<span class="sub-zh">' + esc(cur.zh) + '</span>';
-  h += '</div></div>';
-
-  /* 控制条 */
-  h += '<div class="stage-ctrl">';
+  h += '<div class="card scene-main">';
+  h += '<div class="scene-main-head"><span class="scene-title">' + esc(sc.title) + '</span><span class="scene-sub">' + esc(sc.sub) + ' · ' + (S.sceneLine + 1) + '/' + dlg.length + '</span></div>';
+  h += '<div class="scene-split" style="--ar:' + asp.toFixed(4) + '">';
+  h += '<div class="scene-fig">';
+  h += '<div class="scene-img" id="sceneImg" style="' + cropBg(scenePageUrl(sc), shot) + '"></div>';
+  h += '<div class="scene-fig-bar"><button class="btn btn-ghost btn-xs" id="scFrame" title="选取画面">🔍 换画面</button>' +
+       '<span class="scene-fig-note">课本 ' + sc.page.replace("p", "P") + '</span></div>';
+  h += '</div>';
+  h += '<div class="scene-say">';
+  h += '<div class="scene-line" style="--sp:' + spk.color + ';--spbg:' + spk.bg + '">';
+  h += '<div class="scene-line-top"><span class="scene-spk">' + spk.emoji + " " + esc(cur.sp) + '</span>' +
+       '<button class="btn-sound mini" id="scReplay" title="重听本句">🔊</button></div>';
+  h += '<div class="scene-en">' + esc(cur.en) + '</div>';
+  if (S.showZh && cur.zh) h += '<div class="scene-zh">' + esc(cur.zh) + '</div>';
+  h += '</div>';
+  h += '<div class="scene-ctrl">';
   h += '<button class="btn btn-ghost btn-sm" id="scPrev" title="上一句">⏮</button>';
   h += '<button class="btn btn-primary btn-sm" id="scPlay">' + (S.playing ? "⏸ 暂停" : "▶ 连播") + '</button>';
   h += '<button class="btn btn-ghost btn-sm" id="scNext" title="下一句">⏭</button>';
-  h += '<button class="btn btn-ghost btn-sm" id="scReplay" title="重听本句">🔁</button>';
-  h += '<button class="btn btn-ghost btn-sm" id="scFrame" title="调整取景">🔍 取景</button>';
   h += '<button class="btn btn-ghost btn-sm" id="scFull" title="全页">🗺 全页</button>';
-  h += '<button class="btn btn-ghost btn-sm" id="scBig" title="放大观看">⛶</button>';
-  h += '</div></div>';
+  h += '</div></div></div>';
 
-  /* 对话气泡列表 */
-  h += '<div class="card dialogue-card"><div class="sec-title">💬 对话（点句子即可听）</div><div class="dialogue">';
+  h += '<div class="scene-dots">';
+  dlg.forEach(function (d, k) {
+    const sk = SCENE_SPEAKERS[d.sp] || SCENE_SPEAKERS["旁白"];
+    h += '<button class="dot' + (k === S.sceneLine ? " on" : "") + '" data-line="' + k + '" style="--sp:' + sk.color + '">' + (k + 1) + '</button>';
+  });
+  h += '</div>';
+
+  h += '<div class="card dialogue-card"><div class="sec-title">💬 全文对话（点句子即听）</div><div class="dialogue">';
   dlg.forEach(function (d, k) {
     const sk = SCENE_SPEAKERS[d.sp] || SCENE_SPEAKERS["旁白"];
     const side = (d.sp === "旁白") ? "narr" : (k % 2 ? "right" : "left");
     h += '<div class="bubble ' + side + (k === S.sceneLine ? " on" : "") + '" data-line="' + k + '">';
     h += '<div class="b-head"><span style="color:' + sk.color + '">' + sk.emoji + " " + esc(d.sp) + '</span>' +
          '<button class="btn-sound mini" data-play="' + k + '">🔊</button></div>';
-    h += '<div class="b-en" style="background:' + sk.bg + '">' + esc(d.en) + '</div>';
-    if (S.showZh && d.zh) h += '<div class="b-zh">' + esc(d.zh) + '</div>';
-    h += '</div>';
+    h += '<div class="b-body">';
+    h += '<span class="b-thumb" style="' + cropBg(scenePageUrl(sc), sceneShotFor(sc, k)) + '"></span>';
+    h += '<span class="b-txt"><span class="b-en" style="background:' + sk.bg + '">' + esc(d.en) + '</span>' +
+         (S.showZh && d.zh ? '<span class="b-zh">' + esc(d.zh) + '</span>' : '') + '</span>';
+    h += '</div></div>';
   });
   h += '</div></div>';
 
   view.innerHTML = h;
   bindSceneTab(sc, dlg);
 }
+
 
 function bindSceneTab(sc, dlg) {
   const view = $("#view");
@@ -1358,18 +1380,32 @@ function bindSceneTab(sc, dlg) {
     };
   });
   function paint() {
-    /* 只更新字幕与高亮，避免整页重绘打断播放 */
+    /* 局部更新：主图 + 对话行 + 高亮，避免整页重绘打断播放 */
     const d = dlg[S.sceneLine] || dlg[0];
     const sk = SCENE_SPEAKERS[d.sp] || SCENE_SPEAKERS["旁白"];
-    const sub = $("#subtitle");
-    if (sub) {
-      sub.className = "subtitle" + (d.sp === "旁白" ? " narr" : "");
-      sub.innerHTML = '<span class="spk" style="color:' + sk.color + '">' + sk.emoji + " " + esc(d.sp) + '</span>' +
-        '<span class="sub-en">' + esc(d.en) + '</span>' +
-        (S.showZh && d.zh ? '<span class="sub-zh">' + esc(d.zh) + '</span>' : "");
+    const shot = sceneShotFor(sc, S.sceneLine);
+    const img = $("#sceneImg");
+    if (img) {
+      img.style.cssText = cropBg(scenePageUrl(sc), shot);
+      const fig = $(".scene-fig");
+      if (fig) fig.style.setProperty("--ar", shotAspect(shot).toFixed(4));
     }
-    const pos = $(".scene-pos", view);
-    if (pos) pos.textContent = (S.sceneLine + 1) + "/" + dlg.length;
+    const line = $(".scene-line");
+    if (line) {
+      line.style.setProperty("--sp", sk.color);
+      line.style.setProperty("--spbg", sk.bg);
+      line.innerHTML = '<div class="scene-line-top"><span class="scene-spk">' + sk.emoji + " " + esc(d.sp) + '</span>' +
+        '<button class="btn-sound mini" id="scReplay" title="重听本句">🔊</button></div>' +
+        '<div class="scene-en">' + esc(d.en) + '</div>' +
+        (S.showZh && d.zh ? '<div class="scene-zh">' + esc(d.zh) + '</div>' : "");
+      const rp = $("#scReplay");
+      if (rp) rp.onclick = function () { sceneStopAuto(); syncPlayBtn(); speakLine(null); };
+    }
+    const sub = $(".scene-sub");
+    if (sub) sub.textContent = sc.sub + " · " + (S.sceneLine + 1) + "/" + dlg.length;
+    $all(".dot", view).forEach(function (b) {
+      b.classList.toggle("on", Number(b.getAttribute("data-line")) === S.sceneLine);
+    });
     $all(".bubble", view).forEach(function (b) {
       b.classList.toggle("on", Number(b.getAttribute("data-line")) === S.sceneLine);
     });
@@ -1407,12 +1443,6 @@ function bindSceneTab(sc, dlg) {
     saveJSON(K_SCENES, map);
     renderSceneTab();
   };
-  $("#scBig").onclick = function () {
-    const st = $("#stage");
-    if (!st) return;
-    if (st.requestFullscreen) st.requestFullscreen().catch(function () {});
-    else if (st.webkitRequestFullscreen) st.webkitRequestFullscreen();
-  };
   $all("[data-play]", view).forEach(function (b) {
     b.onclick = function (ev) {
       ev.stopPropagation();
@@ -1428,8 +1458,12 @@ function bindSceneTab(sc, dlg) {
       speakLine(null);
     };
   });
-  const st = $("#stage");
-  if (st) st.onclick = function () { sceneStopAuto(); syncPlayBtn(); goto(S.sceneLine + 1, true); };
+  $all(".dot", view).forEach(function (b) {
+    b.onclick = function () {
+      sceneStopAuto(); syncPlayBtn();
+      goto(Number(b.getAttribute("data-line")), true);
+    };
+  });
 }
 
 /* ---------- 取景器：拖动/缩放页面图，选出一块场景 ---------- */
@@ -1594,17 +1628,23 @@ function renderLessonTab() {
   if (m.kind === "builtin") {
     m.unitText.forEach(function (sec, si) {
       const tb = (typeof TEXTBOOK_TRACKS !== "undefined" ? TEXTBOOK_TRACKS : []).find(function (t) { return t.sec === si; });
-      const bgPage = (typeof SECTION_IMAGES !== "undefined") ? SECTION_IMAGES[si] : null;
-      const bgStyle = bgPage ? ' style="--img:url(' + "'" + SCENE_PAGES[bgPage] + "'" + ')"' : "";
-      const bgCls = bgPage ? " has-img" : "";
-      h += '<div class="card sec' + bgCls + '"' + bgStyle + '><div class="sec-title">' + sec.icon + " " + esc(sec.title) + ' <button class="btn-sound" data-sec="' + si + '">🔊 连读</button>';
+      const scn = (typeof SCENES !== "undefined") ? SCENES.find(function (x) { return x.sec === si; }) : null;
+      h += '<div class="card sec"><div class="sec-title">' + sec.icon + " " + esc(sec.title) + ' <button class="btn-sound" data-sec="' + si + '">🔊 连读</button>';
+      if (scn) h += ' <button class="btn-sound tb-btn" data-goto="' + scn.id + '" title="在情景剧场中打开">🎬 情景</button>';
       if (tb) h += ' <button class="btn-sound tb-btn" data-playfile="' + esc(tb.file) + '" title="' + esc(tb.title + " · " + tb.dur) + '">📻 课本原声 ' + esc(tb.dur) + '</button>';
       h += '</div>';
-      sec.lines.forEach(function (l) {
+      if (scn) {
+        const hero = fitRegion(sceneRegion(scn), 4.6);
+        h += '<div class="sec-hero" style="' + cropBg(scenePageUrl(scn), hero) + '"></div>';
+      }
+      sec.lines.forEach(function (l, li) {
         const cls = l.q ? "line q-line" : "line";
-        h += '<div class="' + cls + '"><div class="line-en">' + speakBtn(l.en) + '<span>' + esc(l.en) + '</span></div>';
-        if (S.showZh && l.zh) h += '<div class="line-zh">' + esc(l.zh) + '</div>';
-        h += '</div>';
+        const thumb = scn ? fitRegion(sceneShotFor(scn, li), 1.9) : null;
+        h += '<div class="' + cls + '">';
+        if (thumb) h += '<span class="line-thumb" style="' + cropBg(scenePageUrl(scn), thumb) + '"></span>';
+        h += '<span class="line-body"><span class="line-en">' + speakBtn(l.en) + '<span>' + esc(l.en) + '</span></span>';
+        if (S.showZh && l.zh) h += '<span class="line-zh">' + esc(l.zh) + '</span>';
+        h += '</span></div>';
       });
       h += '</div>';
     });
@@ -1662,6 +1702,13 @@ function renderLessonTab() {
   const zt = $("#zhToggle");
   if (zt) zt.onchange = function () { S.showZh = zt.checked; renderLessonTab(); };
   $("#stopAll").onclick = stopSpeak;
+  $all("[data-goto]", $("#view")).forEach(function (b) {
+    b.onclick = function () {
+      S.sceneId = b.getAttribute("data-goto");
+      S.sceneLine = 0;
+      setTab("scene");
+    };
+  });
   const ra = $("#readAll");
   if (ra) ra.onclick = function () {
     const all = [];
