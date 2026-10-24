@@ -731,6 +731,120 @@ function playQuestionAudio(q) {
   if (q.audio) speak(q.audio);
 }
 
+/* ---------- 大炮射击动画（选择题） ---------- */
+function popSound() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    popSound.ctx = popSound.ctx || new AC();
+    const ctx = popSound.ctx;
+    if (ctx.state === "suspended") ctx.resume();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(300, ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.18);
+    g.gain.setValueAtTime(0.16, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 0.22);
+  } catch (e) {}
+}
+function fireCannon(btn, onHit) {
+  const card = $("#qcard");
+  const barrel = card ? card.querySelector(".cannon-barrel") : null;
+  const wheel = card ? card.querySelector(".cannon-wheel") : null;
+  const layer = card ? card.querySelector(".cannon-layer") : null;
+  if (!card || !barrel || !wheel || !layer || !btn) { if (onHit) onHit(); return; }
+  const c = layer.getBoundingClientRect();
+  const w = wheel.getBoundingClientRect();
+  const t = btn.getBoundingClientRect();
+  const px = w.left + w.width / 2 - c.left;
+  const py = w.top + w.height / 2 - c.top;
+  const ex = t.left + t.width / 2 - c.left;
+  const ey = t.top + t.height / 2 - c.top;
+  const ang = Math.atan2(ey - py, ex - px) * 180 / Math.PI;
+  barrel.style.transform = "rotate(" + ang.toFixed(1) + "deg)";
+  const rad = ang * Math.PI / 180;
+  const sx = px + Math.cos(rad) * 22;
+  const sy = py + Math.sin(rad) * 22;
+  const dist = Math.sqrt((ex - sx) * (ex - sx) + (ey - sy) * (ey - sy));
+  const dur = Math.max(160, Math.min(520, Math.round(dist * 1.6)));
+  const ball = document.createElement("div");
+  ball.className = "cannon-ball";
+  ball.style.left = (sx - 7) + "px";
+  ball.style.top = (sy - 7) + "px";
+  ball.style.setProperty("--dx", (ex - sx) + "px");
+  ball.style.setProperty("--dy", (ey - sy) + "px");
+  ball.style.animationDuration = dur + "ms";
+  layer.appendChild(ball);
+  const smoke = document.createElement("div");
+  smoke.className = "cannon-smoke";
+  smoke.textContent = "💨";
+  smoke.style.left = (sx + Math.cos(rad) * 10 - 10) + "px";
+  smoke.style.top = (sy + Math.sin(rad) * 10 - 10) + "px";
+  layer.appendChild(smoke);
+  popSound();
+  setTimeout(function () { smoke.remove(); }, 600);
+  setTimeout(function () {
+    ball.remove();
+    const boom = document.createElement("div");
+    boom.className = "cannon-boom";
+    boom.textContent = "💥";
+    boom.style.left = ex + "px";
+    boom.style.top = ey + "px";
+    layer.appendChild(boom);
+    setTimeout(function () { boom.remove(); }, 500);
+    btn.classList.add("opt-hit");
+    setTimeout(function () { btn.classList.remove("opt-hit"); }, 500);
+    if (onHit) onHit();
+  }, dur);
+}
+/* 满分庆祝：全屏彩带礼花 */
+function launchConfetti() {
+  const layer = document.createElement("div");
+  layer.className = "confetti-layer";
+  const colors = ["#f5222d", "#fa8c16", "#fadb14", "#52c41a", "#1890ff", "#722ed1", "#eb2f96"];
+  const emojis = ["⭐", "🌟", "✨", "🎊", "🎉"];
+  for (let i = 0; i < 46; i++) {
+    const p = document.createElement("div");
+    if (i % 6 === 0) { p.className = "confetti confetti-emoji"; p.textContent = emojis[(i / 6) % emojis.length]; }
+    else { p.className = "confetti"; p.style.background = colors[i % colors.length]; }
+    p.style.left = (Math.random() * 100) + "%";
+    p.style.animationDelay = (Math.random() * 1.4).toFixed(2) + "s";
+    p.style.animationDuration = (2.2 + Math.random() * 2).toFixed(2) + "s";
+    layer.appendChild(p);
+  }
+  document.body.appendChild(layer);
+  setTimeout(function () { layer.remove(); }, 6800);
+}
+/* 答错提示：给出所选错误选项的意思（英语选项查词典，汉语选项反向查词典） */
+function zhToEn(zhText) {
+  if (!zhText) return "";
+  /* 先精确匹配释义（dictZh 带词性前缀，整体比对），再按「分号/逗号/空格切分后的义项」匹配 */
+  const keys = Object.keys(DICT);
+  for (let i = 0; i < keys.length; i++) { if (dictZh(keys[i]) === zhText) return keys[i]; }
+  const aliases = [zhText].concat(zhText.split(/[；;，,、\s]+/)).filter(Boolean);
+  for (let i = 0; i < keys.length; i++) {
+    const zh = dictZh(keys[i]);
+    for (let j = 0; j < aliases.length; j++) {
+      const a = aliases[j].replace(/^[a-z]+\./, "");
+      if (a.length >= 2 && (zh === a || zh.indexOf(a) >= 0 || a === zh.replace(/^[a-z]+\./, ""))) return keys[i];
+    }
+  }
+  return "";
+}
+function meaningHint(q, wrongText) {
+  if (!wrongText) return "";
+  if (/^[a-zA-Z][a-zA-Z' -]*$/.test(wrongText)) {
+    const zh = dictZh((lemma(wrongText) || wrongText).toLowerCase());
+    if (zh) return wrongText + " 的意思是「" + zh + "」，不是它哦。";
+    return "";
+  }
+  const en = zhToEn(wrongText);
+  if (en) return "「" + wrongText + "」是 " + en + "，不是本题答案哦。";
+  return "";
+}
+
 /* 词汇 */
 function genWordE2C(model, n) {
   return sample(model.words, n).map(function (w) {
@@ -1020,6 +1134,8 @@ function renderQuiz() {
     h += '<div class="reorder-pool" id="roPool"></div>';
     h += '<div class="q-actions"><button class="btn btn-primary hidden" id="roCheck">检查</button><button class="btn btn-ghost hidden" id="roReset">↺ 重排</button></div>';
   } else {
+    h += '<div class="cannon-layer" aria-hidden="true"></div>';
+    h += '<div class="cannon-wrap" aria-hidden="true"><div class="cannon"><div class="cannon-barrel"></div><div class="cannon-wheel"></div></div></div>';
     h += '<div class="opts" id="opts">';
     q.options.forEach(function (op, i) {
       h += '<button class="opt" data-i="' + i + '"><span class="opt-key">' + "ABCD"[i] + '</span><span>' + esc(op) + '</span></button>';
@@ -1072,42 +1188,72 @@ function renderReorder(q) {
   paint();
 }
 function chooseOption(q, i) {
-  if ($("#qcard").getAttribute("data-done") === "1") return;
+  const card = $("#qcard");
+  if (card.getAttribute("data-done") === "1" || card.getAttribute("data-busy") === "1") return;
   const ok = i === q.answer;
-  finishQuestion(q, ok, null, i);
+  if (q.kind === "reorder") { finishQuestion(q, ok, null, i); return; }
+  const btn = $all("#opts .opt")[i];
+  if (!btn) { finishQuestion(q, ok, null, i); return; }
+  card.setAttribute("data-busy", "1");
+  fireCannon(btn, function () {
+    card.removeAttribute("data-busy");
+    finishQuestion(q, ok, null, i);
+  });
 }
 function finishQuestion(q, ok, customMsg, chosenIdx) {
   const card = $("#qcard");
-  card.setAttribute("data-done", "1");
   const z = S.quiz;
-  if (ok) z.correct++; else { z.wrong.push(q); addWrong(q, z.title); }
+  /* 选择题答错不锁卡：显示所选选项的意思，鼓励重试直到答对 */
+  const canRetry = !ok && q.kind !== "reorder" && !customMsg && chosenIdx != null;
+  const alreadyWrong = card.getAttribute("data-wrong") === "1";
+  if (ok) z.correct++;
+  else if (!alreadyWrong) { z.wrong.push(q); addWrong(q, z.title); }
+  if (!ok) card.setAttribute("data-wrong", "1");
+  if (!ok) { card.classList.add("shake"); setTimeout(function () { card.classList.remove("shake"); }, 450); }
+  if (!canRetry) card.setAttribute("data-done", "1");
   if (q.srsKey) {
-    if (SRS.items[q.srsKey]) srsUpdate(q.srsKey, ok);
-    else if (!ok) srsAdd(q.srsKey, q.srsZh || "", "", "错题自动录入"); /* 错词自动入生词本 */
+    if (SRS.items[q.srsKey]) { if (ok || !alreadyWrong) srsUpdate(q.srsKey, ok); }
+    else if (!ok && !alreadyWrong) srsAdd(q.srsKey, q.srsZh || "", "", "错题自动录入"); /* 错词自动入生词本 */
   }
+  const fb = $("#qFb");
+  fb.classList.remove("hidden", "fb-ok", "fb-bad", "fb-retry");
+  let msg = "";
   if (q.kind === "reorder") {
     $all("#roPool .chip, #roAns .chip").forEach(function (b) { b.disabled = true; });
     $("#roCheck").classList.add("hidden");
     $("#roReset").classList.add("hidden");
+    msg = ok ? "✅ 回答正确！\n" + (customMsg || "") : "❌ 再想想！" + (customMsg ? "\n" + customMsg : "");
+  } else if (canRetry) {
+    const chosenTxt = q.options[chosenIdx] != null ? q.options[chosenIdx] : "";
+    $all("#opts .opt").forEach(function (btn, i) {
+      if (i === chosenIdx) { btn.disabled = true; btn.classList.add("opt-tried"); }
+    });
+    msg = "💨 命中「" + chosenTxt + "」，可惜不是正确答案，调整角度再来一次！";
+    const hint = meaningHint(q, chosenTxt);
+    if (hint) msg += "\n💡 " + hint;
   } else {
     $all("#opts .opt").forEach(function (btn, i) {
       btn.disabled = true;
       if (i === q.answer) btn.classList.add("opt-right");
       else if (i === chosenIdx) btn.classList.add("opt-wrong");
     });
+    if (ok) msg = alreadyWrong ? "✅ 答对啦！坚持就是胜利，你很棒！" : "✅ 回答正确！";
+    else msg = "❌ " + (customMsg ? customMsg : "正确答案：" + q.options[q.answer]);
+    if (ok && customMsg) msg += "\n" + customMsg;
   }
-  const fb = $("#qFb");
-  fb.classList.remove("hidden");
-  fb.classList.add(ok ? "fb-ok" : "fb-bad");
-  let msg = ok ? "✅ 回答正确！" : "❌ 正确答案：" + (q.kind === "reorder" ? q.sentence : q.options[q.answer]);
-  if (customMsg) msg = (ok ? "✅ 回答正确！" : "❌ ") + customMsg;
   if (q.explain) msg += "\n💡 " + q.explain;
+  if (ok) fb.classList.add("fb-ok");
+  else { fb.classList.add("fb-bad"); if (canRetry) fb.classList.add("fb-retry"); }
   fb.textContent = msg;
   if (!ok && (q.audio || q.audioFile)) { setTimeout(function () { playQuestionAudio(q); }, 500); }
   const nx = $("#qNext");
-  nx.classList.remove("hidden");
-  $("#btnNext").textContent = z.i === z.qs.length - 1 ? "查看结果 🏁" : "下一题 →";
-  $("#btnNext").onclick = nextQuestion;
+  if (canRetry) {
+    nx.classList.add("hidden");
+  } else {
+    nx.classList.remove("hidden");
+    $("#btnNext").textContent = z.i === z.qs.length - 1 ? "查看结果 🏁" : "下一题 →";
+    $("#btnNext").onclick = nextQuestion;
+  }
 }
 function nextQuestion() {
   const z = S.quiz;
@@ -1124,14 +1270,18 @@ function renderQuizEnd() {
   h += '<div class="qe-stars">' + stars + '</div>';
   h += '<div class="qe-score">' + z.correct + ' / ' + total + '</div>';
   h += '<div class="qe-pct">正确率 ' + pct + '% · ' + esc(z.title) + '</div>';
+  const perfect = z.correct >= total; /* 答错后订正做对也算满分（错题仍进订正回顾/错题本） */
+  if (perfect) {
+    h += '<div class="qe-score-big">100<span>分</span></div>';
+    h += '<div class="qe-praise">🏆 你非常棒！全部答对啦！</div>';
+  }
   if (z.wrong.length) {
-    h += '<div class="qe-wrong"><div class="qe-wrong-title">❌ 错题回顾（已自动存入错题本' + (z.requeue ? "，生词进度已回退" : "") + '）</div>';
+    h += '<div class="qe-wrong"><div class="qe-wrong-title">📝 订正回顾（已自动存入错题本' + (z.requeue ? "，生词进度已回退" : "") + (perfect ? "，重练全对也算满分）" : "）") + '</div>';
     z.wrong.forEach(function (q) {
       h += '<div class="wrong-item"><div class="wi-q">' + esc(q.prompt) + '</div><div class="wi-a">正确答案：' + esc(q.kind === "reorder" ? q.sentence : q.options[q.answer]) + '</div>' + (q.explain ? '<div class="wi-e">' + esc(q.explain) + '</div>' : '') + '</div>';
     });
     h += '</div>';
-  } else {
-    h += '<div class="qe-perfect">🎉 全对！太棒了！</div>';
+    if (perfect) h += '<div class="qe-hint">全部订正做对也是 100 分！错题已存入错题本，多练几次就更牢固啦。</div>';
   }
   h += '<div class="q-actions center">';
   h += '<button class="btn btn-ghost" id="qeBack">← 返回</button>';
@@ -1147,6 +1297,10 @@ function renderQuizEnd() {
     });
     startQuiz(z.title + " · 错词重现", requeued, { regen: null });
   };
+  if (perfect) {
+    launchConfetti();
+    setTimeout(function () { speak("你非常棒，一百分！"); }, 500);
+  }
   if (z.wrong.length && z.requeue) {
     /* 生词复习：错词当天已回退，无需额外处理 */
   }
