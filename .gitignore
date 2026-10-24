@@ -4,3 +4,11 @@ pdf/
 Thumbs.db
 # 本地测试脚本产物
 tools/tts_texts.json
+# 本地调试临时文件
+.cdp-*.js
+.chrome*.log
+.chrome-home/
+.chrome-tmp/
+.chrome-tmp2/
+.http.log
+.shot-*.png
