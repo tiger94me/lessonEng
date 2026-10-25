@@ -958,7 +958,7 @@ function genCloze(model, n) {
       kind: "cloze", prompt: blanked, sub: "选词填空",
       options: [c.low].concat(sample(others, 3)),
       answer: 0,
-      explain: "正确答案：" + c.low + "（" + DICT[c.base] + "）\n原句：" + s
+      explain: "（" + DICT[c.base] + "）", reveal: "正确答案：" + c.low + "\n原句：" + s
     }));
   }
   return out;
@@ -1242,6 +1242,8 @@ function finishQuestion(q, ok, customMsg, chosenIdx) {
     if (ok && customMsg) msg += "\n" + customMsg;
   }
   if (q.explain) msg += "\n💡 " + q.explain;
+  /* q.reveal 含正确答案/原句，只在不能重试（最终揭晓）时才展示，避免泄题 */
+  if (!canRetry && q.reveal) msg += "\n💡 " + q.reveal;
   if (ok) fb.classList.add("fb-ok");
   else { fb.classList.add("fb-bad"); if (canRetry) fb.classList.add("fb-retry"); }
   fb.textContent = msg;
@@ -1304,6 +1306,129 @@ function renderQuizEnd() {
   if (z.wrong.length && z.requeue) {
     /* 生词复习：错词当天已回退，无需额外处理 */
   }
+  /* 表现优秀 → 追加一道脑筋急转弯（输入答案，答对有奖励） */
+  const bonus = bonusEligible(z);
+  if (bonus) renderRiddleBlock(bonus);
+}
+
+/* ---------- 脑筋急转弯加分题 ----------
+   条件：一次做满 10 道题，且"一次就答对"≥9 道（首次正确率 ≥90%）。
+   注意：因为答错可以重试直到做对，z.correct 最终必然等于总题数，
+        所以必须按"首次答对数 = 总题数 - 首次答错数(z.wrong)"来判定。 */
+const RIDDLE_PASS = 9, RIDDLE_MIN_Q = 10;
+function bonusEligible(z) {
+  if (!z || z.isRiddle) return null;
+  if (z.qs.length < RIDDLE_MIN_Q) return null;
+  const firstTry = z.qs.length - z.wrong.length;
+  if (firstTry < RIDDLE_PASS) return null;
+  if (typeof RIDDLES === "undefined" || !RIDDLES.length) return null;
+  /* 已答过就沿用同一题，避免刷新后换题作弊 */
+  if (!z.riddle) {
+    z.riddle = RIDDLES[Math.floor(Math.random() * RIDDLES.length)];
+    z.riddleDone = false;
+    z.riddleGot = false;
+  }
+  return z.riddle;
+}
+function normAnswer(s) {
+  return String(s == null ? "" : s)
+    .replace(/[\s\u3000]/g, "")
+    .replace(/[，,。.、！!？?；;：:“”"'‘’（）()《》【】~～\-—_]/g, "")
+    .toLowerCase();
+}
+function riddleCorrect(r, input) {
+  const v = normAnswer(input);
+  if (!v) return false;
+  const pool = [r.a, r.anim].concat(r.aliases || []);
+  for (let i = 0; i < pool.length; i++) {
+    const p = normAnswer(pool[i]);
+    if (!p) continue;
+    if (v === p) return true;
+    /* 模糊匹配只用于"多字答案"：孩子多写了"因为/是/啊"之类也能算对。
+       单字答案（如"树""火""纸"）必须精确相等，否则"树懒""火鸡"这类
+       干扰词会被误判为答对。 */
+    if (p.length >= 2 && v.length >= 2 && (v.indexOf(p) >= 0 || p.indexOf(v) >= 0)) return true;
+  }
+  return false;
+}
+function renderRiddleBlock(r) {
+  const box = $("#view .quiz-end");
+  if (!box) return;
+  const html =
+    '<div class="riddle" id="riddleBox">' +
+      '<div class="riddle-head">🧠 加分题 · 脑筋急转弯</div>' +
+      '<div class="riddle-you">你太厉害了，送你一道脑筋急转弯！</div>' +
+      '<div class="riddle-q">' + esc(r.q) + '</div>' +
+      '<div class="riddle-opts">' +
+        (r.options || []).map(function (o, i) {
+          return '<button class="riddle-opt" data-ri="' + i + '">' + esc(o) + '</button>';
+        }).join("") +
+      '</div>' +
+      '<div class="riddle-row">' +
+        '<input id="riddleInput" class="riddle-input" type="text" autocomplete="off" ' +
+          'autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="在这里输入你的答案">' +
+        '<button class="btn btn-primary btn-sm" id="riddleGo">提交</button>' +
+      '</div>' +
+      '<div class="riddle-fb" id="riddleFb"></div>' +
+    '</div>';
+  box.insertAdjacentHTML("beforeend", html);
+
+  const input = $("#riddleInput"), fb = $("#riddleFb"), go = $("#riddleGo");
+  $all(".riddle-opt", $("#riddleBox")).forEach(function (b) {
+    b.onclick = function () {
+      input.value = r.options[parseInt(b.getAttribute("data-ri"), 10)];
+      input.focus();
+    };
+  });
+  function submit() {
+    if (S.quiz && S.quiz.riddleDone) return;
+    const ok = riddleCorrect(r, input.value);
+    S.quiz.riddleDone = true;
+    S.quiz.riddleGot = ok;
+    $all(".riddle-opt", $("#riddleBox")).forEach(function (b) { b.disabled = true; });
+    input.disabled = true; go.disabled = true;
+    if (ok) {
+      fb.className = "riddle-fb ok";
+      fb.innerHTML = '<div class="riddle-ok">🎉 答对啦！你也是个小机灵鬼！</div>' +
+        '<div class="riddle-tip">' + esc(r.tip || "") + '</div>' +
+        '<div class="riddle-prize">🏅 奖励：解锁「机灵鬼」勋章（共 ' + riddleWins() + ' 枚）+ 全对星星一颗 ⭐</div>';
+      launchConfetti();
+      setTimeout(function () { speak("答对啦，你也是个小机灵鬼！"); }, 400);
+      awardRiddle();
+    } else {
+      fb.className = "riddle-fb no";
+      fb.innerHTML = '<div class="riddle-no">😄 差一点点～ 标准答案在这里：<b>' + esc(r.a) + '</b></div>' +
+        '<div class="riddle-tip">' + esc(r.tip || "") + '</div>';
+      setTimeout(function () { speak("答案是，" + r.a + "。" + (r.tip || "")); }, 300);
+    }
+  }
+  go.onclick = submit;
+  input.onkeydown = function (e) { if (e.key === "Enter" || e.keyCode === 13) { e.preventDefault(); submit(); } };
+  /* 已答过（重进结算页）就直接展示结论 */
+  if (S.quiz.riddleDone) {
+    input.value = "";
+    $all(".riddle-opt", $("#riddleBox")).forEach(function (b) { b.disabled = true; });
+    input.disabled = true; go.disabled = true;
+    if (S.quiz.riddleGot) {
+      fb.className = "riddle-fb ok";
+      fb.innerHTML = '<div class="riddle-ok">🎉 你已经答对过啦！</div><div class="riddle-tip">' + esc(r.tip || "") + '</div>';
+    } else {
+      fb.className = "riddle-fb no";
+      fb.innerHTML = '<div class="riddle-no">标准答案：<b>' + esc(r.a) + '</b></div><div class="riddle-tip">' + esc(r.tip || "") + '</div>';
+    }
+  } else {
+    try { input.focus({ preventScroll: true }); } catch (e) { try { input.focus(); } catch (e2) {} }
+  }
+}
+/* 机灵鬼勋章：单独持久化，跨会话累计 */
+const K_RIDDLE = "eclass.riddle.v1";
+function riddleWins() {
+  const d = loadJSON(K_RIDDLE, null);
+  return (d && d.wins) || 0;
+}
+function awardRiddle() {
+  const n = riddleWins() + 1;
+  try { saveJSON(K_RIDDLE, { wins: n, last: todayISO() }); } catch (e) {}
 }
 
 /* ================= 页面渲染 ================= */
@@ -2338,8 +2463,16 @@ function readFileAsText(file, cb) {
 
 /* PDF 课文：优先读取文字层；扫描版（无文字层）给出 OCR 转换指引 */
 function handlePdfFile(file) {
+  /* pdf.js 体积大且仅上传 PDF 时用到，改为按需加载，避免拖慢 iPad 首屏 */
   if (typeof pdfjsLib === "undefined") {
-    showScanModal("未找到 PDF 解析组件（pdfjs/pdf.min.js），请确认应用文件夹完整，或用 OCR 工具转换后上传 txt。");
+    toast("正在加载 PDF 解析组件…");
+    const sc = document.createElement("script");
+    sc.src = "pdfjs/pdf.min.js?v=20261024";
+    sc.onload = function () { setTimeout(function () { handlePdfFile(file); }, 0); };
+    sc.onerror = function () {
+      showScanModal("未找到 PDF 解析组件（pdfjs/pdf.min.js），请确认应用文件夹完整，或用 OCR 工具转换后上传 txt。");
+    };
+    document.head.appendChild(sc);
     return;
   }
   toast("正在读取 PDF（" + file.name + "）…");

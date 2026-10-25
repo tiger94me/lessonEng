@@ -373,10 +373,37 @@
     100% { transform: translateY(105vh) rotate(680deg); opacity: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .confetti, .qe-score-big, .qe-praise, .fb-retry, .cannon-ball, .cannon-boom, .cannon-smoke, .opt-hit, .shake { animation: none !important; }
+    .confetti, .qe-score-big, .qe-praise, .fb-retry, .cannon-ball, .cannon-boom, .cannon-smoke, .opt-hit, .shake, .riddle, .riddle-prize { animation: none !important; }
   }
   .qe-wrong { text-align: left; margin: 10px 0 6px; }
   .qe-wrong-title { font-weight: 700; margin-bottom: 8px; }
+  /* ---- 脑筋急转弯加分题 ---- */
+  .riddle { text-align: left; margin: 14px 0 4px; padding: 14px 16px; border-radius: 14px;
+    background: linear-gradient(160deg, #fff9ec, #f2f7ff); border: 1.5px dashed #f0b64a;
+    animation: riddleIn .5s ease both; }
+  @keyframes riddleIn { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+  .riddle-head { font-weight: 800; color: #b2540a; font-size: 15px; }
+  .riddle-you { font-size: 13px; color: #7b8798; margin: 2px 0 10px; }
+  .riddle-q { font-size: 18px; font-weight: 700; color: var(--text); line-height: 1.5; margin-bottom: 10px; }
+  .riddle-opts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .riddle-opt { border: 1.5px solid #e3d2a8; background: #fff; color: #6b5320; border-radius: 999px;
+    padding: 6px 14px; font-size: 14px; cursor: pointer; }
+  .riddle-opt:active { transform: scale(.96); }
+  .riddle-opt[disabled] { opacity: .5; }
+  .riddle-row { display: flex; gap: 8px; }
+  input.riddle-input { flex: 1; min-width: 0; font-size: 16px; padding: 11px 14px; border-radius: 10px;
+    box-sizing: border-box; height: 46px; min-height: 46px;
+    border: 1.5px solid #d8dde8; background: #fff; color: var(--text); }
+  input.riddle-input:focus { outline: none; border-color: var(--primary); }
+  #riddleGo { min-height: 44px; padding: 0 18px; font-size: 15px; }
+  .riddle-opt { min-height: 40px; }
+  .riddle-fb { margin-top: 10px; font-size: 14px; line-height: 1.6; }
+  .riddle-fb.ok .riddle-ok, .riddle-fb.no .riddle-no { font-weight: 700; }
+  .riddle-fb.ok .riddle-ok { color: var(--ok); font-size: 16px; }
+  .riddle-fb.no .riddle-no { color: var(--bad); }
+  .riddle-tip { color: #6b5320; margin-top: 4px; }
+  .riddle-prize { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #fff4e0;
+    color: #b2540a; font-weight: 700; animation: praiseBounce 2s ease-in-out infinite; }
   .wrong-item { background: #fafbfe; border: 1px solid #edf0f8; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font-size: 14px; }
   .wi-q { font-weight: 600; white-space: pre-wrap; }
   .wi-a { color: var(--ok); margin-top: 2px; white-space: pre-wrap; }
@@ -551,25 +578,47 @@ For Duoduo, Tutu is his best and only friend. He wants to play with Tutu, but Tu
 
 <div id="toast"></div>
 <script>window.__appStarted = false;</script>
-<script src="audio/manifest.js"></script>
-<script src="pdfjs/pdf.min.js"></script>
-<script src="data.js"></script>
-<script src="app.js"></script>
+<script>
+  /* 兜底（必须放在外部脚本之前，才能捕捉脚本下载失败） */
+  window.__bootFails = [];
+  window.addEventListener("error", function (e) {
+    var t = e && e.target;
+    if (t && t.tagName === "SCRIPT") {
+      window.__bootFails.push("脚本没能下载（" + (t.src || "").split("/").pop().split("?")[0] + "）");
+      return;
+    }
+    if (e && e.message) window.__bootFails.push(String(e.message));
+  }, true);
+</script>
+<script src="audio/manifest.js?v=20261025b"></script>
+<script src="data.js?v=20261025b"></script>
+<script src="app.js?v=20261025b"></script>
 <script>
   /* 兜底：script 出错或初始化失败时，页面不能只剩一个头 */
+  function __bootFail(msg) {
+    var v = document.getElementById("view");
+    if (!v || !v.querySelector(".loading")) return;
+    if (window.__appStarted) return;
+    v.innerHTML = '<div class="card" style="line-height:1.7">' +
+      '<b>页面没能加载完成</b><br>' +
+      '<span style="color:#7b8798;font-size:13px">原因：' + String(msg || "未知") + '</span><br>' +
+      '<span style="color:#7b8798;font-size:13px">如果一直这样，请连上网络后点下面按钮重试。</span><br>' +
+      '<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="__hardReload()">重新加载</button></div>';
+  }
+  /* 强制绕过缓存重载，解决 iPad 拿到旧版脚本的问题 */
+  window.__hardReload = function () {
+    try {
+      var u = location.pathname + "?t=" + Date.now();
+      location.replace(u);
+    } catch (e) { location.reload(); }
+  };
   window.addEventListener("error", function (e) {
-    var v = document.getElementById("view");
-    if (v && v.querySelector(".loading")) {
-      v.innerHTML = '<div class="card">页面加载出错了：' + String((e && e.message) || "未知错误") +
-        '<br><button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="location.reload()">重新加载</button></div>';
-    }
-  });
+    var t = e && e.target;
+    if (t && t.tagName !== "SCRIPT") __bootFail((e && e.message) || "未知错误");
+  }, true);
   setTimeout(function () {
-    var v = document.getElementById("view");
-    if (v && v.querySelector(".loading")) {
-      v.innerHTML = '<div class="card">页面没能完成初始化。<br>' +
-        '<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="location.reload()">重新加载</button></div>';
-    }
+    var f = window.__bootFails || [];
+    __bootFail(f.length ? f[f.length - 1] : "初始化超时，可能是网络较慢");
   }, 8000);
 </script>
 </body>
