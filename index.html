@@ -512,6 +512,167 @@
     .quiz-card .q-prompt { font-size: 17px; }
     .line-zh { margin-left: 0; }
   }
+  /* ---------- 管理后台 ---------- */
+  .ad-cur { margin-top: 8px; padding: 8px 12px; background: #eef4ff; border-radius: 10px; font-size: 13.5px; color: #34406b; }
+  .ad-step { margin-top: 12px; }
+  .ad-h { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; color: #2c3557; margin-bottom: 6px; }
+  .ad-num { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%;
+            background: var(--primary); color: #fff; font-size: 13px; font-weight: 700; flex: 0 0 auto; }
+  .ad-badge { margin-left: auto; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+  .ad-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 4px; }
+  .ad-lab { display: block; font-size: 13.5px; color: #45507a; font-weight: 600; margin: 8px 0 6px; }
+  .ad-input { flex: 1 1 220px; min-width: 0; }
+  .ad-input, .ad-textarea {
+    border: 1.5px solid #d8dff2 !important; border-radius: 10px !important;
+    padding: 10px 12px !important; font-size: 16px !important; line-height: 1.55;
+    box-sizing: border-box; min-height: 44px; background: #fff; width: 100%; color: #222;
+    font-family: inherit;
+  }
+  .ad-input:focus, .ad-textarea:focus { border-color: var(--primary) !important; outline: none; box-shadow: 0 0 0 3px rgba(79,110,247,.12); }
+  .ad-textarea { min-height: 160px; resize: vertical; }
+  .ad-btns { gap: 10px; }
+  .ad-tip { font-size: 12.5px; color: var(--muted); }
+  .ad-go { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; align-items: center; }
+  .ad-go .btn { min-height: 44px; }
+  .btn-lg { padding: 12px 20px; font-size: 16px; }
+  .as-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 8px; }
+  .as-none { grid-column: 1 / -1; font-size: 13px; color: var(--muted); background: #f7f9ff; border-radius: 10px; padding: 10px 12px; line-height: 1.6; }
+  .as-item { position: relative; border: 1px solid #e6ebf8; border-radius: 12px; padding: 8px; background: #fff; }
+  .as-thumb { display: block; width: 100%; height: 96px; object-fit: cover; border-radius: 8px; background: #eef2fb; }
+  .as-item.aud { display: flex; flex-direction: column; justify-content: center; min-height: 74px; background: #f7f9ff; }
+  .as-aud-name { font-size: 13px; font-weight: 600; color: #2c3557; word-break: break-all; padding-right: 20px; }
+  .as-name { font-size: 12.5px; font-weight: 600; color: #2c3557; margin-top: 4px; word-break: break-all; }
+  .as-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .as-del { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%; border: none;
+            background: rgba(0,0,0,.45); color: #fff; font-size: 12px; line-height: 1; cursor: pointer; padding: 0; }
+  .as-del:hover { background: #e0483c; }
+  .admin-log { margin-top: 10px; font-size: 13px; color: #45507a; line-height: 1.7; max-height: 160px; overflow-y: auto; }
+  .admin-log:empty { display: none; }
+  .al-line.warn { color: #a56a00; }
+  .al-line.bad { color: #c0392b; }
+  .al-line.ok { color: #1e7d45; }
+  .ap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 12px 0; }
+  .ap-card { background: #f7f9ff; border: 1px solid #e6ebf8; border-radius: 12px; padding: 10px 12px; }
+  .ap-k { font-size: 12.5px; color: var(--muted); }
+  .ap-v { font-size: 17px; font-weight: 700; color: #2c3557; margin: 2px 0; }
+  .ap-n { font-size: 11.5px; color: var(--muted); }
+  .ap-secs { display: grid; gap: 10px; }
+  .ap-sec { border: 1px solid #e6ebf8; border-radius: 12px; padding: 10px 12px; background: #fff; }
+  .ap-sec-t { font-size: 14px; font-weight: 700; color: #2c3557; display: flex; align-items: center; gap: 6px; }
+  .ap-sec-n { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .ap-line { font-size: 13.5px; color: #45507a; margin-top: 4px; line-height: 1.6; }
+  .ap-more { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .ap-assets { display: grid; gap: 8px; margin: 12px 0 2px; }
+  .ap-asset { font-size: 13px; color: #a56a00; background: #fff8e8; border-radius: 10px; padding: 8px 12px; }
+  .ap-asset.ok { color: #1e7d45; background: #eefaf2; }
+/* ---------- 页脚（同时是管理页的隐藏入口） ---------- */
+#siteFoot { text-align: center; padding: 22px 12px 34px; }
+#siteFoot button { border: none; background: none; color: #c3cadd; font-size: 12px; letter-spacing: .04em;
+  padding: 8px 14px; cursor: default; -webkit-tap-highlight-color: transparent; user-select: none; }
+#siteFoot button:active { color: #b9c2da; }
+/* ---------- 单词消消乐 ---------- */
+.gm-diffs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 10px; }
+.gm-diff { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; min-height: 64px;
+  border: 2px solid #e2e8f7; border-radius: 14px; background: #fff; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.gm-diff b { font-size: 16px; color: #2c3557; }
+.gm-diff span { font-size: 11.5px; color: var(--muted); }
+.gm-diff.on { border-color: #4c7cf3; background: #f0f5ff; box-shadow: 0 2px 10px rgba(76,124,243,.16); }
+.gm-tip { font-size: 13px; color: #5a6588; background: #f6f8fe; border-radius: 10px; padding: 8px 12px; }
+.gm-best { font-size: 13px; color: #a56a00; background: #fff8e8; border-radius: 10px; padding: 8px 12px; margin-top: 8px; }
+.gm-actions { margin-top: 14px; display: flex; justify-content: center; }
+.gm-actions .btn { min-width: 180px; min-height: 48px; font-size: 17px; }
+
+.gm-hud { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 12px; }
+.gm-stat { background: #f4f7ff; border-radius: 12px; padding: 6px 14px; text-align: center; min-width: 66px; }
+.gm-stat span { display: block; font-size: 11.5px; color: var(--muted); }
+.gm-stat b { font-size: 18px; color: #2c3557; }
+.gm-stat b.urgent, .urgent { color: #e0483c !important; }
+.gm-stat.gm-combo { background: #fff2e8; }
+.gm-stat.gm-combo b { color: #d97706; }
+
+.gm-board { position: relative; display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 8px;
+  border-radius: 16px; padding: 8px; background: #eef2fb; overflow: hidden; }
+/* 卡片消除处的缝隙能看到底图，加深一点让"拼图感"更明显 */
+.gm-board.has-bg::before { content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: 0;
+  background: rgba(15,30,60,.10); pointer-events: none; }
+.gm-board > * { position: relative; z-index: 1; }
+/* 有底图时：整张动物图铺在棋盘上，卡片盖住各自那一格，消除后露出原图 */
+.gm-board.has-bg { background-image: var(--bg); background-size: cover; background-position: center; box-shadow: inset 0 0 0 2px rgba(255,255,255,.6); }
+.gm-card { position: relative; aspect-ratio: 1 / 1; border: 2px solid #dde5f8; border-radius: 14px; background: #fff;
+  display: flex; align-items: center; justify-content: center; padding: 4px; cursor: pointer; overflow: hidden;
+  transition: transform .12s ease, box-shadow .15s ease, opacity .32s ease, background .15s ease;
+  -webkit-tap-highlight-color: transparent; user-select: none; }
+.gm-card .gm-face { position: relative; z-index: 2; font-size: 15px; font-weight: 700; line-height: 1.25;
+  word-break: break-word; text-align: center; }
+/* 卡片一律纯色不透明，先看清字；底图只在卡片消除后才露出来 */
+.gm-card.en { background: #dbe9ff; border-color: #a9c6f5; }
+.gm-card.en .gm-face { color: #10386b; font-family: ui-rounded, "Segoe UI", system-ui, sans-serif; }
+.gm-card.zh { background: #d5f5e4; border-color: #9cdcb8; }
+.gm-card.zh .gm-face { color: #0d5737; }
+.gm-card:not(.open) { background: #8fa2c4; border-color: #7d90b3; }
+.gm-card:not(.open) .gm-face { color: #fff; font-size: 22px; font-weight: 800; }
+/* 卡片消除后彻底透明，露出底下的动物图 */
+.gm-board.has-bg .gm-card.gone { background: transparent; }
+.gm-card:active { transform: scale(.94); }
+.gm-card.sel { transform: translateY(-3px) scale(1.05); box-shadow: 0 8px 20px rgba(76,124,243,.34); border-color: #4c7cf3; z-index: 2; }
+.gm-card.boom { animation: gmBoom .46s ease forwards; }
+.gm-card.shake { animation: gmShake .5s ease; border-color: #e0483c; }
+.gm-card.gone { background: transparent !important; border-color: transparent !important;
+  opacity: 0; pointer-events: none; box-shadow: none; }
+.gm-board.drift .gm-card:not(.gone) { animation: gmDrift 3.4s ease-in-out infinite; }
+.gm-board.drift .gm-card:not(.gone):nth-child(2n) { animation-delay: .5s; }
+.gm-board.drift .gm-card:not(.gone):nth-child(3n) { animation-delay: 1.1s; }
+@keyframes gmDrift {
+  0%,100% { transform: translate(0,0); }
+  33% { transform: translate(2px,-3px); }
+  66% { transform: translate(-2px,2px); }
+}
+@keyframes gmBoom {
+  0% { transform: scale(1.05); }
+  40% { transform: scale(1.16); box-shadow: 0 0 0 10px rgba(255,205,60,.5); }
+  100% { transform: scale(.2) rotate(16deg); opacity: 0; }
+}
+@keyframes gmShake {
+  0%,100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); } 40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); } 80% { transform: translateX(4px); }
+}
+.gm-ctrl { display: flex; gap: 8px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+.gm-ctrl .btn { min-height: 44px; }
+
+.gm-over { text-align: center; margin-top: 14px; }
+.gm-over-ico { font-size: 46px; line-height: 1.1; }
+.gm-over-t { font-size: 21px; font-weight: 800; color: #2c3557; margin: 4px 0; }
+.gm-over.win .gm-over-t { color: #1e7d45; }
+.gm-stars { font-size: 26px; letter-spacing: 4px; color: #f5b301; }
+.gm-over-s { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+.gm-over-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
+.gm-over-grid div { background: #f6f8fe; border-radius: 12px; padding: 8px; }
+.gm-over-grid span { display: block; font-size: 11.5px; color: var(--muted); }
+.gm-over-grid b { font-size: 19px; color: #2c3557; }
+.gm-over-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.gm-over-btns .btn { min-height: 46px; }
+@media (max-width: 420px) {
+  .gm-diffs { gap: 6px; }
+  .gm-diff { padding: 10px 4px; }
+  .gm-diff b { font-size: 14.5px; }
+  .gm-card .gm-face { font-size: 13px; }
+  .gm-stat { min-width: 58px; padding: 5px 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gm-card, .gm-card.boom, .gm-card.shake { animation: none !important; transition: none !important; }
+}
+/* ---------- 测验：倒计时 + 上一题/暂停 ---------- */
+.q-countdown { margin-top: 10px; font-size: 13.5px; color: #1d4ed8; background: #eef4ff; border: 1px solid #cfe0ff;
+  border-radius: 10px; padding: 8px 12px; text-align: center; }
+.q-countdown b { font-size: 16px; color: #1e40af; }
+#qNext { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+#qNext .btn { min-height: 44px; }
+#btnPrev:disabled { opacity: .42; }
+#btnPause.btn-primary { background: #e0a800; border-color: #d19d00; }
+@media (max-width: 420px) {
+  #qNext .btn { flex: 1 1 30%; font-size: 13.5px; padding: 8px 6px; }
+}
 </style>
 </head>
 <body>
@@ -576,6 +737,8 @@ For Duoduo, Tutu is his best and only friend. He wants to play with Tutu, but Tu
   </div>
 </div>
 
+<footer id="siteFoot"><button id="footSecret" type="button" aria-label="学习记录">外研社英语 · 五上 Unit 3</button></footer>
+
 <div id="toast"></div>
 <script>window.__appStarted = false;</script>
 <script>
@@ -590,9 +753,9 @@ For Duoduo, Tutu is his best and only friend. He wants to play with Tutu, but Tu
     if (e && e.message) window.__bootFails.push(String(e.message));
   }, true);
 </script>
-<script src="audio/manifest.js?v=20261025b"></script>
-<script src="data.js?v=20261025b"></script>
-<script src="app.js?v=20261025b"></script>
+<script src="audio/manifest.js?v=20261025m"></script>
+<script src="data.js?v=20261025m"></script>
+<script src="app.js?v=20261025m"></script>
 <script>
   /* 兜底：script 出错或初始化失败时，页面不能只剩一个头 */
   function __bootFail(msg) {
