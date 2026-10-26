@@ -108,4 +108,37 @@ const t1 = run('addDaysISO("2026-10-22", 1)');
 const t2 = run('addDaysISO("2026-12-31", 1)');
 if (t1 !== '2026-10-23' || t2 !== '2027-01-01') throw new Error('date calc wrong: ' + t1 + ',' + t2);
 console.log('OK 日期计算: +1天 =', t1, ' 跨年 =', t2);
+
+/* 游戏：配对消消 + 短语大炮 */
+run('GAME.mode = "match"');
+const wpool = run('gameWordPool()');
+if (wpool.length < 12) throw new Error('gameWordPool too few: ' + wpool.length);
+['easy','normal','hard'].forEach(d => {
+  const need = run('GAME_DIFF.' + d + '.pairs');
+  if (wpool.length < need) throw new Error(d + ' pairs ' + need + ' > pool ' + wpool.length);
+});
+const mcards = run('gameBuildCards("easy")');
+if (mcards.length !== 12) throw new Error('match cards != 12: ' + mcards.length);
+const sidesOk = mcards.filter(c => c.side === 'en').length === 6 && mcards.filter(c => c.side === 'zh').length === 6;
+if (!sidesOk) throw new Error('match card sides wrong');
+const byPair = {};
+mcards.forEach(c => { byPair[c.pair] = (byPair[c.pair]||0)+1; });
+if (Object.values(byPair).some(n => n !== 2)) throw new Error('match pair count wrong');
+console.log('OK 配对消消: 词池=%d 卡=%d 对=%d', wpool.length, mcards.length, mcards.length/2);
+
+run('GAME.mode = "phrase"');
+const ppool = run('gamePhrasePool()');
+if (ppool.length < 8) throw new Error('gamePhrasePool too few: ' + ppool.length);
+ppool.forEach(p => {
+  if (!p.zh) throw new Error('phrase without zh: ' + p.en);
+  if (p.words.length < 2 || p.words.length > 4) throw new Error('phrase word count: ' + p.en);
+  if (!p.words.every(w => /^[A-Za-z'-]+$/.test(w))) throw new Error('phrase bad token: ' + p.en);
+  if (p.words.join(' ') !== p.en) throw new Error('phrase words mismatch: ' + p.en);
+});
+['easy','normal','hard'].forEach(d => {
+  const need = run('PHRASE_DIFF.' + d + '.rounds');
+  if (ppool.length < need) throw new Error(d + ' rounds ' + need + ' > phrase pool ' + ppool.length);
+});
+console.log('OK 短语大炮: 短语池=%d 词块数=%s', ppool.length, JSON.stringify(ppool.slice(0,4).map(p=>p.words.length)));
+
 console.log('\n全部冒烟测试通过 ✅');

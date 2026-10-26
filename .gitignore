@@ -6,6 +6,8 @@ Thumbs.db
 tools/tts_texts.json
 # 本地调试临时文件
 .cdp-*.js
+.dbg-*.js
+.tmp/
 .chrome*.log
 .chrome-home/
 .chrome-tmp/

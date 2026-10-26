@@ -1058,12 +1058,11 @@ function popSound() {
     o.start(); o.stop(ctx.currentTime + 0.22);
   } catch (e) {}
 }
-function fireCannon(btn, onHit) {
-  const card = $("#qcard");
-  const barrel = card ? card.querySelector(".cannon-barrel") : null;
-  const wheel = card ? card.querySelector(".cannon-wheel") : null;
-  const layer = card ? card.querySelector(".cannon-layer") : null;
-  if (!card || !barrel || !wheel || !layer || !btn) { if (onHit) onHit(); return; }
+/* 炮台转向 + 炮弹飞行的公共实现。
+   layer = 动画层（position:absolute 覆盖舞台）；barrel/wheel = 炮管与炮轮；
+   btn = 目标元素；delay = 转向后延迟多久开炮（让孩子看清瞄准）。 */
+function fireCannonCore(layer, barrel, wheel, btn, onHit, delay) {
+  if (!layer || !barrel || !wheel || !btn) { if (onHit) onHit(); return; }
   const c = layer.getBoundingClientRect();
   const w = wheel.getBoundingClientRect();
   const t = btn.getBoundingClientRect();
@@ -1077,36 +1076,45 @@ function fireCannon(btn, onHit) {
   const sx = px + Math.cos(rad) * 22;
   const sy = py + Math.sin(rad) * 22;
   const dist = Math.sqrt((ex - sx) * (ex - sx) + (ey - sy) * (ey - sy));
-  const dur = Math.max(160, Math.min(520, Math.round(dist * 1.6)));
-  const ball = document.createElement("div");
-  ball.className = "cannon-ball";
-  ball.style.left = (sx - 7) + "px";
-  ball.style.top = (sy - 7) + "px";
-  ball.style.setProperty("--dx", (ex - sx) + "px");
-  ball.style.setProperty("--dy", (ey - sy) + "px");
-  ball.style.animationDuration = dur + "ms";
-  layer.appendChild(ball);
-  const smoke = document.createElement("div");
-  smoke.className = "cannon-smoke";
-  smoke.textContent = "💨";
-  smoke.style.left = (sx + Math.cos(rad) * 10 - 10) + "px";
-  smoke.style.top = (sy + Math.sin(rad) * 10 - 10) + "px";
-  layer.appendChild(smoke);
-  popSound();
-  setTimeout(function () { smoke.remove(); }, 600);
+  const dur = Math.max(150, Math.min(380, Math.round(dist * 1.4)));
   setTimeout(function () {
-    ball.remove();
-    const boom = document.createElement("div");
-    boom.className = "cannon-boom";
-    boom.textContent = "💥";
-    boom.style.left = ex + "px";
-    boom.style.top = ey + "px";
-    layer.appendChild(boom);
-    setTimeout(function () { boom.remove(); }, 500);
-    btn.classList.add("opt-hit");
-    setTimeout(function () { btn.classList.remove("opt-hit"); }, 500);
-    if (onHit) onHit();
-  }, dur);
+    const ball = document.createElement("div");
+    ball.className = "cannon-ball";
+    ball.style.left = (sx - 7) + "px";
+    ball.style.top = (sy - 7) + "px";
+    ball.style.setProperty("--dx", (ex - sx) + "px");
+    ball.style.setProperty("--dy", (ey - sy) + "px");
+    ball.style.animationDuration = dur + "ms";
+    layer.appendChild(ball);
+    const smoke = document.createElement("div");
+    smoke.className = "cannon-smoke";
+    smoke.textContent = "💨";
+    smoke.style.left = (sx + Math.cos(rad) * 10 - 10) + "px";
+    smoke.style.top = (sy + Math.sin(rad) * 10 - 10) + "px";
+    layer.appendChild(smoke);
+    popSound();
+    setTimeout(function () { smoke.remove(); }, 600);
+    setTimeout(function () {
+      ball.remove();
+      const boom = document.createElement("div");
+      boom.className = "cannon-boom";
+      boom.textContent = "💥";
+      boom.style.left = ex + "px";
+      boom.style.top = ey + "px";
+      layer.appendChild(boom);
+      setTimeout(function () { boom.remove(); }, 500);
+      btn.classList.add("opt-hit");
+      setTimeout(function () { btn.classList.remove("opt-hit"); }, 500);
+      if (onHit) onHit();
+    }, dur);
+  }, delay || 0);
+}
+function fireCannon(btn, onHit) {
+  const card = $("#qcard");
+  const layer = card ? card.querySelector(".cannon-layer") : null;
+  const barrel = card ? card.querySelector(".cannon-barrel") : null;
+  const wheel = card ? card.querySelector(".cannon-wheel") : null;
+  fireCannonCore(layer, barrel, wheel, btn, onHit, 0);
 }
 /* 满分庆祝：全屏彩带礼花 */
 function launchConfetti() {
@@ -1882,7 +1890,7 @@ const ADMIN_TAB = ["admin", "⚙️ 管理"];
 function setTab(t) {
   stopSpeak();
   const wasAdmin = (S.tab === "admin");
-  if (S.tab === "game" && t !== "game") { GAME.running = false; gameStopTimer(); }
+  if (S.tab === "game" && t !== "game") { GAME.running = false; GAME.phReady = false; gameStopTimer(); }
   S.tab = t;
   /* 进出管理页时导航栏要重建：管理标签只在管理页里出现 */
   if (wasAdmin !== (t === "admin")) { renderTabs(); syncAdminChrome(); }
@@ -3629,8 +3637,11 @@ function restoreMedia(saved) {
 }
 
 /* ================= 单词消消乐（Word Match Blast） =================
-   规则：词表拆成英文卡 + 中文卡，点两张配对，配对成功即消除。
-   难度：简单（正面朝上、无限时、无生命）/ 普通（背面朝上、限时、3 命）/ 困难（限时更短、3 命、卡片轻微漂浮）
+   两种玩法（可融合切换）：
+   ① 配对消消 —— 词表拆成英文卡 + 中文卡，点两张配对，配对成功即消除。
+   ② 短语大炮 —— 把短语拆成单词块，用大炮把正确的单词块依次打回托盘，
+                   拼出完整短语（更刺激，也练短语搭配）。
+   难度：简单（正面朝上、无限时、无生命）/ 普通（背面朝上、3 命）/ 困难（限时更短、3 命、卡片轻微漂浮）
    发音：点英文卡即朗读该单词。 */
 const K_GAME = "eclass.game.v1";
 const GAME_DIFF = {
@@ -3642,12 +3653,19 @@ const GAME_DIFF = {
   hard:   { key: "hard",   label: "困难", pairs: 9, flip: true,  time: 0,  lives: 3, drift: true,
             maxOpen: 3, tip: "9 对共 18 张卡，会轻微漂移，不限时间。最多同时翻开 3 张，其中有 2 张配成一对就消除。" }
 };
+/* 短语大炮的难度：rounds = 要拼几个短语 */
+const PHRASE_DIFF = {
+  easy:   { key: "easy",   label: "简单", rounds: 4, lives: 0, time: 0,  drift: false, tip: "4 个短语，每个拆成单词块，用大炮按顺序打回托盘。" },
+  normal: { key: "normal", label: "普通", rounds: 6, lives: 3, time: 0,  drift: false, tip: "6 个短语，打错 3 次要重来。" },
+  hard:   { key: "hard",   label: "困难", rounds: 8, lives: 2, time: 120, drift: true,  tip: "8 个短语，120 秒限时，只允许错 2 次。" }
+};
 /* 底图池：消除卡片后露出完整动物图。每次开局随机换一张。 */
 const GAME_BG = [];
 (function () {
   for (let i = 1; i <= 16; i++) GAME_BG.push("scenes/animal/animal" + (i < 10 ? "0" + i : i) + ".jpg");
 })();
 const GAME = {
+  mode: "match",  /* match = 配对消消 / phrase = 短语大炮 */
   bg: "",        /* 本局用的底图 */
   bgOff: 0,      /* 底图池轮换指针，避免连续重复 */
   diff: "normal",
@@ -3665,7 +3683,10 @@ const GAME = {
   startedAt: 0,
   sound: true,
   music: false,
-  lastMatchAt: 0
+  lastMatchAt: 0,
+  /* ---- 短语大炮专属 ---- */
+  ph: null,          /* { rounds:[{phrase, words, zh}], idx, slots, tray, done, miss } */
+  phReady: false     /* 短语局是否已准备好（等孩子点开始） */
 };
 
 /* 取当前单元的词：优先用有中文释义的词条，生词本里的释义也并进来 */
@@ -3689,6 +3710,25 @@ function gameWordPool() {
   if (SRS && SRS.items) {
     Object.keys(SRS.items).forEach(function (k) { push(k, SRS.items[k].zh); });
   }
+  return out;
+}
+
+/* 短语大炮的词块池：短语按单词拆开，2~3 个词的最佳（块太大点不准，太小没挑战） */
+function gamePhrasePool() {
+  const m = currentModel();
+  const out = [];
+  const seen = {};
+  ((m && m.phrases) || []).forEach(function (p) {
+    const en = String(p.en || "").trim(), zh = String(p.zh || "").trim();
+    if (!en || !zh) return;
+    if (seen[en.toLowerCase()]) return;
+    /* 只保留"词组型"短语：2~4 个英文词，且每个词都是纯字母，方便拆块 */
+    const ws = en.split(/\s+/);
+    if (ws.length < 2 || ws.length > 4) return;
+    if (!ws.every(function (w) { return /^[A-Za-z'-]+$/.test(w); })) return;
+    seen[en.toLowerCase()] = 1;
+    out.push({ en: en, words: ws, zh: zh });
+  });
   return out;
 }
 
@@ -3768,12 +3808,17 @@ function gameSaveBest(diff, lost) {
 }
 
 /* ---------- 计时 ---------- */
+/* 当前模式的难度配置 */
+function gameCfg() {
+  return GAME.mode === "phrase" ? (PHRASE_DIFF[GAME.diff] || PHRASE_DIFF.normal)
+                                : (GAME_DIFF[GAME.diff] || GAME_DIFF.normal);
+}
 function gameStopTimer() {
   if (GAME.timer) { clearInterval(GAME.timer); GAME.timer = null; }
 }
 function gameStartTimer() {
   gameStopTimer();
-  if (!GAME_DIFF[GAME.diff].time) return;
+  if (!gameCfg().time) return;
   const t0 = Date.now();
   const base = GAME.timeLeft;
   GAME.timer = setInterval(function () {
@@ -3791,17 +3836,27 @@ function gameStartTimer() {
 /* ---------- 面板渲染 ---------- */
 function renderGameTab() {
   const view = $("#view");
-  const diff = GAME_DIFF[GAME.diff] || GAME_DIFF.normal;
-  const best = gameBest()[GAME.diff];
+  const isPhrase = GAME.mode === "phrase";
+  const diff = isPhrase ? (PHRASE_DIFF[GAME.diff] || PHRASE_DIFF.normal) : (GAME_DIFF[GAME.diff] || GAME_DIFF.normal);
+  const best = gameBest()[GAME.mode + ":" + GAME.diff];
   let h = '<div class="tab-head card"><div class="tab-title">🎮 单词消消乐</div>';
-  h += '<div class="hint">把英文卡和它的中文意思配成一对，全部消完就通关。点英文卡会朗读这个词。</div></div>';
+  h += '<div class="hint">两种玩法都能练本课单词：配对消消练英汉对应，短语大炮练短语搭配。点英文卡会朗读这个词。</div></div>';
 
+  /* 玩法选择：两个卡片，选中的高亮 */
   h += '<div class="card gm-setup" id="gmSetup">';
+  h += '<div class="gm-modes">';
+  h += '<button class="gm-mode' + (isPhrase ? "" : " on") + '" data-mode="match">' +
+       '<b>🧩 配对消消</b><span>英文卡 + 中文卡，点两张配一对</span></button>';
+  h += '<button class="gm-mode' + (isPhrase ? " on" : "") + '" data-mode="phrase">' +
+       '<b>💥 短语大炮</b><span>把单词块打回托盘，拼出短语</span></button>';
+  h += '</div>';
   h += '<div class="gm-diffs">';
   ["easy", "normal", "hard"].forEach(function (k) {
-    const c = GAME_DIFF[k];
+    const c = isPhrase ? PHRASE_DIFF[k] : GAME_DIFF[k];
+    const sub = isPhrase ? (c.rounds + " 个短语" + (c.time ? " · " + c.time + "秒" : " · 不限时"))
+                         : (c.pairs * 2 + " 张卡" + (c.time ? " · " + c.time + "秒" : " · 不限时"));
     h += '<button class="gm-diff' + (k === GAME.diff ? " on" : "") + '" data-diff="' + k + '">' +
-         '<b>' + c.label + '</b><span>' + c.pairs * 2 + ' 张卡' + (c.time ? " · " + c.time + "秒" : " · 不限时") + '</span></button>';
+         '<b>' + c.label + '</b><span>' + sub + '</span></button>';
   });
   h += '</div>';
   h += '<div class="gm-tip">' + esc(diff.tip) + '</div>';
@@ -3820,7 +3875,17 @@ function renderGameTab() {
        '<div class="gm-stat hidden" id="gLifeBox"><span>生命</span><b id="gLife">❤❤❤</b></div>' +
        '<div class="gm-stat gm-combo hidden" id="gComboBox"><span>连击</span><b id="gCombo">0</b></div>' +
        '</div>';
-  h += '<div class="gm-board" id="gmBoard"></div>';
+  /* 短语大炮：先显示本局目标，再开炮 */
+  h += '<div class="gm-ph-head hidden" id="gmPhHead"></div>';
+  /* 舞台：炮台 + 单词块 */
+  h += '<div class="gm-stage" id="gmStage">' +
+       '<div class="cannon-layer" id="gmLayer" aria-hidden="true"></div>' +
+       '<div class="cannon-wrap" id="gmCannon" aria-hidden="true"><div class="cannon"><div class="cannon-barrel" id="gmBarrel"></div><div class="cannon-wheel" id="gmWheel"></div></div></div>' +
+       '<div class="gm-board" id="gmBoard"></div>' +
+       '</div>';
+  /* 收集托盘：打中的单词块落到这里，拼成完整短语 */
+  h += '<div class="gm-tray hidden" id="gmTray"></div>';
+  h += '<div class="gm-banner hidden" id="gmBanner"></div>';
   h += '<div class="gm-ctrl">' +
        '<button class="btn btn-ghost btn-sm" id="gmShuffle">🔀 重排</button>' +
        '<button class="btn btn-ghost btn-sm" id="gmSound">🔊 音效开</button>' +
@@ -3830,9 +3895,19 @@ function renderGameTab() {
   h += '<div class="gm-result hidden" id="gmResult"></div>';
   view.innerHTML = h;
 
+  $all("[data-mode]", view).forEach(function (b) {
+    b.onclick = function () {
+      const m = b.getAttribute("data-mode");
+      if (m === GAME.mode) return;
+      GAME.mode = m;
+      GAME.phReady = false;
+      renderGameTab();
+    };
+  });
   $all("[data-diff]", view).forEach(function (b) {
     b.onclick = function () {
       GAME.diff = b.getAttribute("data-diff");
+      GAME.phReady = false;
       renderGameTab();
     };
   });
@@ -3868,6 +3943,7 @@ function gameCols(n) {
 function gameRenderBoard() {
   const board = $("#gmBoard");
   if (!board) return;
+  if (GAME.mode === "phrase") { gameRenderPhraseRound(false); return; }
   const n = GAME.cards.length;
   const cols = gameCols(n);
   const rows = Math.ceil(n / cols);
@@ -3900,11 +3976,17 @@ function gameRenderBoard() {
 }
 
 function gameHud() {
-  const left = GAME.cards.filter(function (c) { return !c.gone; }).length;
+  const isPhrase = GAME.mode === "phrase";
+  let left;
+  if (isPhrase) {
+    left = GAME.ph ? GAME.ph.slots.filter(function (s) { return !s.shot; }).length : 0;
+  } else {
+    left = GAME.cards.filter(function (c) { return !c.gone; }).length;
+  }
   if ($("#gScore")) $("#gScore").textContent = GAME.score;
-  if ($("#gLeft")) $("#gLeft").textContent = left + " 张";
+  if ($("#gLeft")) $("#gLeft").textContent = isPhrase ? (GAME.total - (GAME.ph ? GAME.ph.done : 0)) + " 个" : left + " 张";
   if ($("#gTime")) $("#gTime").textContent = GAME.timeLeft + " 秒";
-  const hasLives = !!(GAME_DIFF[GAME.diff] && GAME_DIFF[GAME.diff].lives);
+  const hasLives = !!(gameCfg().lives);
   if ($("#gLife")) $("#gLife").textContent = hasLives ? "❤".repeat(Math.max(0, GAME.lives)) : "";
   const lb = $("#gLifeBox");
   if (lb) lb.classList.toggle("hidden", !hasLives);
@@ -3915,6 +3997,9 @@ function gameHud() {
 
 /* ---------- 开局 ---------- */
 function gameStart() {
+  GAME.bg = gameNextBg();
+  GAME.phReady = false;
+  if (GAME.mode === "phrase") { gameStartPhrase(); return; }
   const cfg = GAME_DIFF[GAME.diff];
   const cards = gameBuildCards(GAME.diff);
   if (!cards) {
@@ -3927,19 +4012,215 @@ function gameStart() {
   GAME.score = 0;
   GAME.combo = 0;
   GAME.bestCombo = 0;
-  GAME.bg = gameNextBg();
   GAME.lives = cfg.lives || 0;
   GAME.timeLeft = cfg.time || 0;
   GAME.startedAt = Date.now();
   $("#gmSetup").classList.add("hidden");
   $("#gmBoardWrap").classList.remove("hidden");
   $("#gmResult").classList.add("hidden");
+  gameShowChrome(false);
   const tb = $("#gTimeBox"), lb = $("#gLifeBox");
   if (tb) tb.classList.toggle("hidden", !cfg.time);
   if (lb) lb.classList.toggle("hidden", !cfg.lives);
   gameRenderBoard();
-  GAME.cards.forEach(function (c) { c.zh = c.zh; });
   gameStartTimer();
+}
+/* 短语大炮 / 配对模式 的共用显隐 */
+function gameShowChrome(isPhrase) {
+  const head = $("#gmPhHead"), tray = $("#gmTray"), cannon = $("#gmCannon"), stage = $("#gmStage");
+  if (head) head.classList.toggle("hidden", !isPhrase);
+  if (tray) tray.classList.toggle("hidden", !isPhrase);
+  if (cannon) cannon.classList.toggle("hidden", !isPhrase);
+  if (stage) stage.classList.toggle("phrase", !!isPhrase);
+}
+
+/* ---------- 短语大炮：准备一局 ---------- */
+function gameStartPhrase() {
+  const cfg = PHRASE_DIFF[GAME.diff] || PHRASE_DIFF.normal;
+  const pool = gamePhrasePool();
+  if (pool.length < 2) {
+    toast("本课短语不够，先去管理页上传课文吧");
+    return;
+  }
+  const pick = sample(pool, Math.min(cfg.rounds, pool.length));
+  GAME.ph = {
+    rounds: pick,
+    idx: 0,
+    slots: [],      /* 本回合待发射的单词块（打中就移除） */
+    tray: [],       /* 已打中的单词（按顺序拼起来） */
+    miss: 0,        /* 本回合打错次数 */
+    done: 0         /* 已完成的短语数 */
+  };
+  GAME.score = 0;
+  GAME.combo = 0;
+  GAME.bestCombo = 0;
+  GAME.lives = cfg.lives || 0;
+  GAME.timeLeft = cfg.time || 0;
+  GAME.total = pick.length;
+  GAME.lock = false;
+  GAME.running = true;
+  GAME.phReady = true;
+  GAME.startedAt = Date.now();
+  $("#gmSetup").classList.add("hidden");
+  $("#gmBoardWrap").classList.remove("hidden");
+  $("#gmResult").classList.add("hidden");
+  gameShowChrome(true);
+  const tb = $("#gTimeBox"), lb = $("#gLifeBox");
+  if (tb) tb.classList.toggle("hidden", !cfg.time);
+  if (lb) lb.classList.toggle("hidden", !cfg.lives);
+  /* 短语局没有"重排"（顺序是谜题的一部分），换成"听一遍" */
+  const sh = $("#gmShuffle");
+  if (sh) {
+    sh.textContent = "🔊 听本句";
+    sh.onclick = function () { phSpeakCurrent(); };
+  }
+  gameRenderPhraseRound(true);
+  gameStartTimer();
+}
+
+/* 当前回合（第 idx 个短语）的目标与词块 */
+function phRound() {
+  const ph = GAME.ph;
+  if (!ph || ph.idx >= ph.rounds.length) return null;
+  const r = ph.rounds[ph.idx];
+  return r;
+}
+function phSpeakCurrent() {
+  const r = phRound();
+  if (r) speak(r.en);
+}
+
+/* 渲染短语大炮的"弹匣"：把短语的单词块打乱排在棋盘上。first=true 表示新回合 */
+function gameRenderPhraseRound(first) {
+  const board = $("#gmBoard"), head = $("#gmPhHead"), tray = $("#gmTray");
+  if (!board || !GAME.ph) return;
+  const r = phRound();
+  if (!r) { return; }
+  if (first || !GAME.ph.slots.length) {
+    GAME.ph.slots = shuffle(r.words.map(function (w, i) {
+      return { id: "w" + i, text: w, shot: false };
+    }));
+    GAME.ph.tray = [];
+    GAME.ph.miss = 0;
+  }
+  /* 目标横幅 */
+  if (head) {
+    head.classList.remove("hidden");
+    head.innerHTML = '<div class="gm-ph-goal">🎯 第 ' + (GAME.ph.idx + 1) + ' / ' + GAME.roundsTotal() +
+      ' 个短语 · 用大炮把单词块按顺序打下来</div>' +
+      '<div class="gm-ph-zh">中文意思：<b>' + esc(r.zh) + '</b></div>';
+  }
+  /* 棋盘：3 列（手机上也好点） */
+  board.style.setProperty("--cols", 3);
+  board.style.setProperty("--rows", Math.ceil(GAME.ph.slots.length / 3));
+  board.style.setProperty("--bg", 'url("' + GAME.bg + '")');
+  board.classList.add("has-bg");
+  let h = "";
+  GAME.ph.slots.forEach(function (s) {
+    if (s.shot) { h += '<div class="gm-card gone" data-id="' + s.id + '"></div>'; return; }
+    h += '<button type="button" class="gm-card en open" data-id="' + s.id + '">' +
+         '<span class="gm-face">' + esc(s.text) + '</span></button>';
+  });
+  board.innerHTML = h;
+  $all("[data-id]", board).forEach(function (b) {
+    b.onclick = function () { gamePhraseFire(b.getAttribute("data-id"), b); };
+  });
+  gameRenderTray();
+  gameHud();
+  /* 每次新回合先给一句"预告"：读中文意思，孩子知道要拼什么 */
+  if (first) { phSpeakCurrent(); }
+}
+GAME.roundsTotal = function () { return GAME.total || 0; };
+
+/* 托盘：已打中的单词按顺序排好，拼成短语 */
+function gameRenderTray() {
+  const tray = $("#gmTray");
+  if (!tray || !GAME.ph) return;
+  tray.classList.remove("hidden");
+  let h = '<div class="gm-tray-label">📥 托盘（按顺序收集单词）</div><div class="gm-tray-slots">';
+  const need = phRound() ? phRound().words.length : 0;
+  for (let i = 0; i < need; i++) {
+    const w = GAME.ph.tray[i];
+    h += '<div class="gm-tray-slot' + (w ? " filled" : "") + '">' + (w ? esc(w) : "?") + '</div>';
+  }
+  h += '</div></div>';
+  tray.innerHTML = h;
+}
+
+function gameBanner(html, cls) {
+  const b = $("#gmBanner");
+  if (!b) return;
+  b.innerHTML = html;
+  b.className = "gm-banner " + (cls || "");
+  b.classList.remove("hidden");
+  clearTimeout(b._t);
+  b._t = setTimeout(function () { b.classList.add("hidden"); }, 2200);
+}
+
+/* 奖励时刻：棋盘清空，露出动物底图，中间写上刚拼出的短语 */
+function phRevealBg(r) {
+  const board = $("#gmBoard");
+  if (!board) return;
+  board.classList.add("reveal");
+  board.innerHTML = '<div class="gm-reveal"><div class="gm-reveal-en">' + esc(r.en) + '</div>' +
+                    '<div class="gm-reveal-zh">' + esc(r.zh) + '</div></div>';
+  clearTimeout(board._t);
+  board._t = setTimeout(function () { board.classList.remove("reveal"); }, 1600);
+}
+
+/* 点一个单词块 → 大炮瞄准并发射 */
+function gamePhraseFire(id, btn) {
+  if (!GAME.running && !GAME.phReady) return;
+  if (GAME.lock || !GAME.ph) return;
+  const r = phRound();
+  if (!r) return;
+  const slot = GAME.ph.slots.find(function (s) { return s.id === id; });
+  if (!slot || slot.shot) return;
+  const layer = $("#gmLayer"), barrel = $("#gmBarrel"), wheel = $("#gmWheel");
+  GAME.lock = true;
+  const want = r.words[GAME.ph.tray.length];  /* 下一个该收集的单词 */
+  const ok = slot.text === want;
+  fireCannonCore(layer, barrel, wheel, btn, function () {
+    if (ok) {
+      slot.shot = true;
+      GAME.ph.tray.push(slot.text);
+      gameSfx.good();
+      GAME.score += 50 + (GAME.combo > 0 ? 10 : 0);
+      GAME.combo++;
+      if (GAME.combo > GAME.bestCombo) GAME.bestCombo = GAME.combo;
+      /* 整句收集完 → 庆祝并进入下一回合 */
+      if (GAME.ph.tray.length >= r.words.length) {
+        gameBanner('🎉 拼对啦！<b>' + esc(r.en) + '</b> = ' + esc(r.zh), "win");
+        if (GAME.combo >= 3) gameSfx.combo(); else gameSfx.win();
+        GAME.ph.done++;
+        GAME.ph.idx++;
+        /* 奖励：把底图亮出来 1.5 秒，孩子看到自己拼出的短语写在动物图上 */
+        phRevealBg(r);
+        setTimeout(function () {
+          GAME.lock = false;
+          if (GAME.ph.idx >= GAME.ph.rounds.length) { gameOver(true); return; }
+          gameRenderPhraseRound(true);
+        }, 1600);
+        return;
+      }
+      GAME.lock = false;
+      gameRenderPhraseRound(false);
+    } else {
+      GAME.combo = 0;
+      GAME.ph.miss++;
+      gameSfx.bad();
+      btn.classList.add("shake");
+      setTimeout(function () { btn.classList.remove("shake"); }, 500);
+      gameBanner('💨 这一块不是现在要的，现在要收集的是 <b>' + esc(want || "?") + '</b>', "miss");
+      const cfg = PHRASE_DIFF[GAME.diff] || PHRASE_DIFF.normal;
+      GAME.lock = false;
+      if (cfg.lives) {
+        GAME.lives = Math.max(0, GAME.lives - 1);
+        gameHud();
+        if (GAME.lives <= 0) { setTimeout(function () { gameOver(false); }, 900); return; }
+      }
+    }
+  }, 260);
 }
 
 /* ---------- 点卡 ---------- */
@@ -3956,6 +4237,7 @@ function gameFindPair(ids) {
 }
 
 function gameTap(id) {
+  if (GAME.mode === "phrase") { return; }
   if (!GAME.running || GAME.lock) return;
   const card = GAME.cards.find(function (c) { return c.id === id; });
   if (!card || card.gone) return;
@@ -4037,6 +4319,7 @@ function gameTap(id) {
 }
 
 function gameShuffle() {
+  if (GAME.mode === "phrase") { phSpeakCurrent(); return; }
   if (!GAME.running) return;
   const alive = GAME.cards.filter(function (c) { return !c.gone; });
   const rest = GAME.cards.filter(function (c) { return c.gone; });
@@ -4048,6 +4331,7 @@ function gameShuffle() {
 
 function gameQuit() {
   GAME.running = false;
+  GAME.phReady = false;
   gameStopTimer();
   GAME.picked = [];
   renderGameTab();
@@ -4056,20 +4340,24 @@ function gameQuit() {
 /* ---------- 结算 ---------- */
 function gameOver(win) {
   GAME.running = false;
+  GAME.phReady = false;
   gameStopTimer();
   GAME.lock = true;
   const used = Math.round((Date.now() - GAME.startedAt) / 1000);
+  const isPhrase = GAME.mode === "phrase";
   if (win) {
-    const cfg = GAME_DIFF[GAME.diff];
-    let bonus = 0;
-    if (cfg.time && GAME.timeLeft > 0) bonus = GAME.timeLeft * 5;
-    GAME.score += bonus;
+    if (!isPhrase) {
+      const cfg = GAME_DIFF[GAME.diff];
+      let bonus = 0;
+      if (cfg.time && GAME.timeLeft > 0) bonus = GAME.timeLeft * 5;
+      GAME.score += bonus;
+    }
     gameSfx.win();
   } else {
     gameSfx.lose();
   }
   const lost = { score: GAME.score, time: used };
-  const best = gameSaveBest(GAME.diff, win ? lost : Object.assign({}, lost, { score: 0 }));
+  const best = gameSaveBest(GAME.mode + ":" + GAME.diff, win ? lost : Object.assign({}, lost, { score: 0 }));
   const stars = win ? (GAME.bestCombo >= 5 ? 3 : (GAME.bestCombo >= 2 ? 2 : 1)) : 0;
   const box = $("#gmResult");
   if (!box) return;
@@ -4078,7 +4366,9 @@ function gameOver(win) {
   h += '<div class="gm-over-t">' + (win ? "恭喜通关！" : "这次没成功") + '</div>';
   if (win) {
     h += '<div class="gm-stars">' + "★".repeat(stars) + "☆".repeat(3 - stars) + '</div>';
-    h += '<div class="gm-over-s">最高连击 ×' + GAME.bestCombo + '</div>';
+    h += '<div class="gm-over-s">最高连击 ×' + GAME.bestCombo + (isPhrase ? " · 完成 " + GAME.ph.done + " 个短语" : "") + '</div>';
+  } else if (isPhrase && GAME.ph) {
+    h += '<div class="gm-over-s">还剩 ' + (GAME.total - GAME.ph.done) + ' 个短语没拼完</div>';
   } else {
     h += '<div class="gm-over-s">还剩 ' + GAME.cards.filter(function (c) { return !c.gone; }).length + ' 张卡没消掉</div>';
   }

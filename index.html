@@ -571,6 +571,14 @@
   padding: 8px 14px; cursor: default; -webkit-tap-highlight-color: transparent; user-select: none; }
 #siteFoot button:active { color: #b9c2da; }
 /* ---------- 单词消消乐 ---------- */
+.gm-modes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
+.gm-mode { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 12px 12px; min-height: 66px;
+  border: 2px solid #e2e8f7; border-radius: 14px; background: #fff; cursor: pointer; text-align: left;
+  -webkit-tap-highlight-color: transparent; }
+.gm-mode b { font-size: 15px; color: #2c3557; }
+.gm-mode span { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+.gm-mode.on { border-color: #4c7cf3; background: #f0f5ff; box-shadow: 0 2px 10px rgba(76,124,243,.16); }
+.gm-mode.on b { color: #1d4ed8; }
 .gm-diffs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 10px; }
 .gm-diff { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; min-height: 64px;
   border: 2px solid #e2e8f7; border-radius: 14px; background: #fff; cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -640,6 +648,60 @@
 .gm-ctrl { display: flex; gap: 8px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
 .gm-ctrl .btn { min-height: 44px; }
 
+/* ---------- 短语大炮：舞台 + 托盘 + 横幅 ---------- */
+.gm-stage { position: relative; }
+/* 短语局的棋盘固定 3 列，卡片大一点好点。
+   注意：这里只能用 background-color，不能用 background 简写——
+   简写会把 .gm-board.has-bg 设的 background-image 冲掉。 */
+.gm-stage.phrase .gm-board { --cols: 3; background-color: #eef2fb; }
+.gm-stage.phrase .gm-card { aspect-ratio: 1 / 1; }
+.gm-stage.phrase .gm-card .gm-face { font-size: 17px; }
+.gm-ph-head { text-align: center; margin-bottom: 10px; }
+.gm-ph-goal { font-size: 15px; font-weight: 700; color: #2c3557; }
+.gm-ph-zh { font-size: 13.5px; color: #5a6588; margin-top: 2px; }
+.gm-ph-zh b { color: #1d4ed8; }
+.gm-tray { margin-top: 12px; border: 2px dashed #b9c9ee; border-radius: 14px; padding: 8px 10px 10px;
+  background: linear-gradient(180deg, #fbfcff, #f2f6ff); }
+.gm-tray-label { font-size: 12.5px; color: #5a6588; margin-bottom: 6px; text-align: center; }
+.gm-tray-slots { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.gm-tray-slot { min-width: 58px; min-height: 44px; padding: 4px 10px; border-radius: 10px;
+  background: #fff; border: 2px solid #dbe3f7; display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 700; color: #aab6d0; }
+.gm-tray-slot.filled { border-color: #1e7d45; background: #eefaf2; color: #0d5737;
+  animation: trayPop .3s ease; }
+@keyframes trayPop {
+  0% { transform: scale(.6); }
+  60% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+.gm-banner { margin-top: 12px; text-align: center; font-size: 15px; font-weight: 700; padding: 10px 12px;
+  border-radius: 12px; background: #fff8e8; color: #8a6410; border: 1px solid #ffe3a8; }
+.gm-banner b { color: #b26b00; }
+.gm-banner.win { background: #eefaf2; color: #0d5737; border-color: #a9dfc0; }
+.gm-banner.win b { color: #1e7d45; }
+.gm-banner.miss { background: #fdeeee; color: #b3372b; border-color: #f3c2bd; }
+/* 奖励时刻：清空棋盘露出动物图，中间写刚拼出的短语 */
+.gm-board.reveal { background-image: var(--bg); background-size: cover; background-position: center;
+  min-height: 190px; display: flex; align-items: center; justify-content: center; }
+.gm-reveal { text-align: center; background: rgba(255,255,255,.9); border-radius: 14px;
+  padding: 12px 18px; box-shadow: 0 6px 18px rgba(20,40,80,.22); animation: trayPop .34s ease; }
+.gm-reveal-en { font-size: 22px; font-weight: 800; color: #10386b; }
+.gm-reveal-zh { font-size: 14px; color: #0d5737; margin-top: 2px; }
+@media (max-width: 420px) {
+  .gm-reveal-en { font-size: 18px; }
+}
+@media (max-width: 420px) {
+  .gm-diffs { gap: 6px; }
+  .gm-diff { padding: 10px 4px; }
+  .gm-diff b { font-size: 14.5px; }
+  .gm-mode { padding: 10px; min-height: 60px; }
+  .gm-mode b { font-size: 14px; }
+  .gm-card .gm-face { font-size: 13px; }
+  .gm-stage.phrase .gm-card .gm-face { font-size: 14.5px; }
+  .gm-tray-slot { min-width: 50px; min-height: 40px; font-size: 14px; }
+  .gm-stat { min-width: 58px; padding: 5px 10px; }
+}
+
 .gm-over { text-align: center; margin-top: 14px; }
 .gm-over-ico { font-size: 46px; line-height: 1.1; }
 .gm-over-t { font-size: 21px; font-weight: 800; color: #2c3557; margin: 4px 0; }
@@ -660,7 +722,7 @@
   .gm-stat { min-width: 58px; padding: 5px 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .gm-card, .gm-card.boom, .gm-card.shake { animation: none !important; transition: none !important; }
+  .gm-card, .gm-card.boom, .gm-card.shake, .gm-tray-slot.filled { animation: none !important; transition: none !important; }
 }
 /* ---------- 测验：倒计时 + 上一题/暂停 ---------- */
 .q-countdown { margin-top: 10px; font-size: 13.5px; color: #1d4ed8; background: #eef4ff; border: 1px solid #cfe0ff;
@@ -753,9 +815,9 @@ For Duoduo, Tutu is his best and only friend. He wants to play with Tutu, but Tu
     if (e && e.message) window.__bootFails.push(String(e.message));
   }, true);
 </script>
-<script src="audio/manifest.js?v=20261025m"></script>
-<script src="data.js?v=20261025m"></script>
-<script src="app.js?v=20261025m"></script>
+<script src="audio/manifest.js?v=20261026a"></script>
+<script src="data.js?v=20261026a"></script>
+<script src="app.js?v=20261026a"></script>
 <script>
   /* 兜底：script 出错或初始化失败时，页面不能只剩一个头 */
   function __bootFail(msg) {
