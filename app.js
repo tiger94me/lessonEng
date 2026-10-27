@@ -172,14 +172,31 @@ const TTS = {
   },
   _splitChunks: function (text) {
     if (text.length <= 180) return [text];
-    const parts = text.split(/(?<=[.!?])\s+/);
-    const out = [];
+    /* 老版 iPad Safari 不支持后行断言 (?<=...)，会抛 SyntaxError 让整个脚本加载失败。
+       改成手工切分：只在「句末标点 + 空白」处断开，效果相同。 */
+    const parts = [];
     let cur = "";
+    const chars = String(text);
+    for (let i = 0; i < chars.length; i++) {
+      cur += chars[i];
+      const isEnd = chars[i] === "." || chars[i] === "!" || chars[i] === "?";
+      const nextIsSpace = i + 1 < chars.length && /\s/.test(chars[i + 1]);
+      if (isEnd && nextIsSpace) {
+        /* 把紧跟的空白也吃掉，避免下一段开头带空格 */
+        while (i + 1 < chars.length && /\s/.test(chars[i + 1])) i++;
+        parts.push(cur);
+        cur = "";
+      }
+    }
+    if (cur) parts.push(cur);
+    if (!parts.length) parts.push(text);
+    const out = [];
+    let buf = "";
     parts.forEach(function (p) {
-      if ((cur + " " + p).trim().length <= 180) cur = (cur ? cur + " " : "") + p;
-      else { if (cur) out.push(cur); cur = p; }
+      if ((buf + " " + p).trim().length <= 180) buf = (buf ? buf + " " : "") + p;
+      else { if (buf) out.push(buf); buf = p; }
     });
-    if (cur) out.push(cur);
+    if (buf) out.push(buf);
     return out;
   },
   _speakBrowser: function (text, opts, seq, next) {
